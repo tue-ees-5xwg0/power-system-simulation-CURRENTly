@@ -1,0 +1,62 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "power-system-simulation"
+authors = [{name = "TU/e EES group"}]
+description = "Student project for power system simulation"
+readme = "README.md"
+license = {text = "BSD License (BSD)"}
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: BSD License"
+]
+requires-python = ">=3.14"
+# add dependencies of your core package, check the license first!
+dependencies = []
+version = "0.1"
+
+[dependency-groups]
+test = [
+  'pytest',
+  'pytest-cov'
+]
+lint = [
+  'ruff'
+]
+example = [
+  'ipykernel'
+]
+dev = [
+  {include-group = "test"},
+  {include-group = "lint"},
+  {include-group = "example"}
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = ["--cov=power_system_simulation", "--cov-report", "term", "--cov-report", "html:python_cov_html", "--cov-fail-under=95"]
+
+[tool.ruff]
+line-length = 120
+target-version = "py314"
+
+[tool.ruff.lint]
+select = [
+    "E",  # pycodestyle errors
+    "W",  # pycodestyle warnings
+    "F",  # pyflakes
+    "I",  # isort
+    "B",  # flake8-bugbear
+    "C4", # flake8-comprehensions
+    "UP", # pyupgrade
+]
+ignore = []
+
+[tool.ruff.lint.isort]
+combine-as-imports = true
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
