@@ -4,7 +4,12 @@ build-backend = "hatchling.build"
 
 [project]
 name = "power-system-simulation"
-authors = [{name = "Alejandro Solá Bengoechea", email = "a.sola.bengoechea@student.tue.nl"}]
+
+authors = [
+{ name = "Jarno de Poorter", email = "jarno.depoorter.jdp@gmail.com" },
+{ name = "Oliwia Hejduk", email = "o.hejduk@student.tue.nl" },
+{name = "Alejandro Solá Bengoechea", email = "a.sola.bengoechea@student.tue.nl"},
+]
 description = "Student project for power system simulation"
 readme = "README.md"
 license = {text = "BSD License (BSD)"}
