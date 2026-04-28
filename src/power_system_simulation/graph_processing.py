@@ -1,12 +1,34 @@
+import networkx as nx
+
 from typing import List, Tuple
 from scipy.sparse.csgraph import connected_components
 
-
+# IDNotFoundError child class of Exception class
 class IDNotFoundError(Exception):
+    def __init__(
+        self,
+        id: int,
+        message: str
+    ) -> None:
+        #Call base exception class to handle message
+        super().__init__(message)
+
+        self.id = id
     pass
 
 
 class InputLengthDoesNotMatchError(Exception):
+    def __init__(
+        self,
+        first_lenght: int,
+        second_length: int,
+        message: str
+    ) -> None:
+        #Call base exception class to handle message
+        super().__init__(message)
+
+        self.first_length = first_length
+        self.second_length = second_length
     pass
 
 
@@ -37,7 +59,7 @@ class GraphProcessor:
         self,
         vertex_ids: List[int],
         edge_ids: List[int],
-        edge_vertex_id_pairs: List[Tuple[int, int]],
+        vertex_edge_id_pairs: List[Tuple[int, int]],
         edge_enabled: List[bool],
         source_vertex_id: int,
     ) -> None:
@@ -71,9 +93,44 @@ class GraphProcessor:
         """
         ## put your implementation here
         ## Check for conditions 1 - 5
+        # 1. vertex_ids and edge_ids should be unique. (IDNotUniqueError)
+        vertex_set = set(vertex_ids)
+        edge_set = set(edge_ids)
+
+        if len(vertex_set) != len(vertex_ids):
+            raise IDNotUniqueError("vertex_ids are not unique.")
+        if len(edge_set) != len(edge_ids):
+            raise IDNotUniqueError("edge_ids are not unique.")
+
+        # 2. edge_vertex_id_pairs should have the same length as edge_ids
+        if len(vertex_ids) != len(edge_ids):
+            raise InputLengthDoesNotMatchError(len(vertex_ids), len(edge_ids), "vertex_ids and edge_ids do not contain same number of elements.")
+
+        # 3. vertex_edge_id_pairs should contain valid vertex ids. (IDNotFoundError)
+        for vertex, edge in vertex_edge_id_pairs:
+            if vertex not in vertex_set:
+                raise IDNotFoundError(f"Vertex {vertex} not found in vertex set.")
+            if edge not in edge_set:
+                raise IDNotFoundError(f"Edge {edge} not found in edge set.")
+        
+        # 4. edge_enabled should have the same length as edge_ids.
+        if len(edge_ids) is not len(edge_enabled):
+            raise InputLengthDoesNotMatchError(len(edge_ids), len(edge_enabled), "edge_ids and edge_enabled do not contain same number of elements.")
+
+        # 5. source_vertex_id should be a valid vertex id. (IDNotFoundError)
+        if source_vertex_id not in vertex_set:
+            raise IDNotFoundError(source_vertex_id, "source_vertex_id not contained in vertex set.")
 
         ## Build graph matrix
-        # Build compressed sparse matrix of graph
+        graph = nx.Graph()
+        graph.add_nodes_from(vertex_ids)
+
+        # Connect vertices and edges
+
+        for i, (vertex, edge) in enumerate(vertex_edge_id_pairs):
+            if edge_enabled[i] == True:
+                graph.add()
+
 
         ## Check for conditions 6-7
         # Check if all components are connected using "connected_components(csgraph)"
