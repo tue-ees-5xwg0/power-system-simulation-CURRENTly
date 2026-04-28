@@ -1,10 +1,5 @@
-"""
-This is a skeleton for the graph processing assignment.
-
-We define a graph processor class with some function skeletons.
-"""
-
 from typing import List, Tuple
+from scipy.sparse.csgraph import connected_components
 
 
 class IDNotFoundError(Exception):
@@ -68,7 +63,22 @@ class GraphProcessor:
             edge_enabled: list of bools indicating of an edge is enabled or not
             source_vertex_id: vertex id of the source in the graph
         """
-        # put your implementation here
+
+        """
+        Looking at the implementation use of the graph as given in exercise 2, we can observe that load components
+        can be described using nodes. A graph can be described using graph matrix representation. Applying this format
+        ensures compatibility with SciPy package
+        """
+        ## put your implementation here
+        ## Check for conditions 1 - 5
+
+        ## Build graph matrix
+        # Build compressed sparse matrix of graph
+
+        ## Check for conditions 6-7
+        # Check if all components are connected using "connected_components(csgraph)"
+        # Check for cycles using depth first search
+
         pass
 
     def find_downstream_vertices(self, edge_id: int) -> List[int]:
