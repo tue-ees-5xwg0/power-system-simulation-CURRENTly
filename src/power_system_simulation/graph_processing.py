@@ -1,7 +1,5 @@
 import networkx as nx
 
-from typing import List, Tuple
-from scipy.sparse.csgraph import connected_components
 
 # IDNotFoundError child class of Exception class
 class IDNotFoundError(Exception):
@@ -20,7 +18,7 @@ class IDNotFoundError(Exception):
 class InputLengthDoesNotMatchError(Exception):
     def __init__(
         self,
-        first_lenght: int,
+        first_length: int,
         second_length: int,
         message: str
     ) -> None:
@@ -55,12 +53,14 @@ class GraphProcessor:
     We are using an undirected graph in the processor.
     """
 
+
+
     def __init__(
         self,
-        vertex_ids: List[int],
-        edge_ids: List[int],
-        vertex_edge_id_pairs: List[Tuple[int, int]],
-        edge_enabled: List[bool],
+        vertex_ids: list[int],
+        edge_ids: list[int],
+        vertex_edge_id_pairs: list[tuple[int, int]],
+        edge_enabled: list[bool],
         source_vertex_id: int,
     ) -> None:
         """
@@ -97,10 +97,7 @@ class GraphProcessor:
         vertex_set = set(vertex_ids)
         edge_set = set(edge_ids)
 
-        if len(vertex_set) != len(vertex_ids):
-            raise IDNotUniqueError("vertex_ids are not unique.")
-        if len(edge_set) != len(edge_ids):
-            raise IDNotUniqueError("edge_ids are not unique.")
+        self._check_uniqueness(vertex_ids, edge_ids)
 
         # 2. edge_vertex_id_pairs should have the same length as edge_ids
         if len(vertex_ids) != len(edge_ids):
@@ -112,7 +109,7 @@ class GraphProcessor:
                 raise IDNotFoundError(f"Vertex {vertex} not found in vertex set.")
             if edge not in edge_set:
                 raise IDNotFoundError(f"Edge {edge} not found in edge set.")
-        
+
         # 4. edge_enabled should have the same length as edge_ids.
         if len(edge_ids) is not len(edge_enabled):
             raise InputLengthDoesNotMatchError(len(edge_ids), len(edge_enabled), "edge_ids and edge_enabled do not contain same number of elements.")
@@ -138,7 +135,16 @@ class GraphProcessor:
 
         pass
 
-    def find_downstream_vertices(self, edge_id: int) -> List[int]:
+    def _check_uniqueness(vertex_ids: list[int], edge_ids: list[int]):
+        vertex_set = set(vertex_ids)
+        edge_set = set(edge_ids)
+
+        if len(vertex_set) != len(vertex_ids):
+            raise IDNotUniqueError("vertex_ids are not unique.")
+        if len(edge_set) != len(edge_ids):
+            raise IDNotUniqueError("edge_ids are not unique.")
+
+    def find_downstream_vertices(self, edge_id: int) -> list[int]:
         """
         Given an edge id, return all the vertices which are in the downstream of the edge,
             with respect to the source vertex.
@@ -165,7 +171,7 @@ class GraphProcessor:
         # put your implementation here
         pass
 
-    def find_alternative_edges(self, disabled_edge_id: int) -> List[int]:
+    def find_alternative_edges(self, disabled_edge_id: int) -> list[int]:
         """
         Given an enabled edge, do the following analysis:
             If the edge is going to be disabled,
