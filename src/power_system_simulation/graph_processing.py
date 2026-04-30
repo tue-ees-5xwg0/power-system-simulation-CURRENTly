@@ -1,4 +1,7 @@
+from collections import defaultdict
+
 import networkx as nx
+import scipy.sparse as sp
 
 
 # IDNotFoundError child class of Exception class
@@ -35,6 +38,19 @@ class InputLengthDoesNotMatchError(Exception):
 
 
 class IDNotUniqueError(Exception):
+    pass
+
+class ImproperEdgeConnections(Exception):
+    def __init__(
+        self,
+        edge_id: int | None,
+        connections: int,
+        message: str
+    ) -> None:
+        super().__init__(message)
+
+        self.edge_id = edge_id
+        self.connections = connections
     pass
 
 
@@ -111,16 +127,16 @@ class GraphProcessor:
         # 5. source_vertex_id should be a valid vertex id. (IDNotFoundError)
         self._check_valid_source_vertex(source_vertex_id, vertex_ids)
 
-        ## Build graph matrix
+        # Create graph
+        # Pair vertices
+        connectivity = self._pair_vertices(vertex_edge_id_pairs)
+
+        # Connect vertices
         graph = nx.Graph()
-        graph.add_nodes_from(vertex_ids)
+        graph.add_edges_from(connectivity)
 
-        # Connect vertices and edges
-
-        for i, (vertex, edge) in enumerate(vertex_edge_id_pairs):
-            if edge_enabled[i] == True:
-                graph.add()
-
+        # 6. The graph should be fully connected. (GraphNotFullyConnectedError)
+        self._check_graph_connected(graph)
 
         ## Check for conditions 6-7
         # Check if all components are connected using "connected_components(csgraph)"
@@ -169,6 +185,37 @@ class GraphProcessor:
         except IDNotFoundError as IDError:
             raise SourceVertexNotFoundError(source_vertex_id, f"source_vertex_id: {id} not found in vertex_ids.") from IDError
         pass
+
+    def _pair_vertices(vertex_edge_id_pairs: list[tuple[int, int]]) -> list[tuple[int, int]]:
+        # Create dictionary with edge connections along with list of connected vertices
+        edge_connected: dict[int, list[int]] = defaultdict()
+        for vertex_id, edge_id in vertex_edge_id_pairs:
+            edge_connected[edge_id].append(vertex_id)
+
+        # Pair nodes specified by edge_connected
+        connectivity: list[tuple[int,int]] = []
+        for edge_id in edge_connected.keys():
+            # Check for improper number of connections
+            edge_connections = edge_connected.get(edge_id)
+            num_connections = len(edge_connections)
+            if num_connections != 2:
+                raise ImproperEdgeConnections(edge_id, num_connections, f"Edge {edge_id} has {num_connections} connections, any edge can only be connected to 2 vertices.")
+
+            # Add nodes to connectivity matrix
+            connectivity.append(tuple(edge_connections))
+
+        return connectivity
+
+    def _nx_graph_to_scipy(graph: nx.classes.graph.Graph) -> sp._csr.csr_array:
+        return nx.to_scipy_sparse_array(graph)
+
+
+    def _is_graph_connected(graph: sp._csr.csr_array) -> bool:
+        n_components , _ = sp.connected_components(graph)
+        if n_components == 1:
+            return True
+        return False
+
 
     def find_downstream_vertices(self, edge_id: int) -> list[int]:
         """

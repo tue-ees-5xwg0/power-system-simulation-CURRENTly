@@ -21,6 +21,7 @@ requires-python = ">=3.14"
 # add dependencies of your core package, check the license first!
 dependencies = [
     "networkx>=3.6.1",
+    "scipy>=1.17.1",
 ]
 version = "0.1"
 
