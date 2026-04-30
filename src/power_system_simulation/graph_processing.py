@@ -14,6 +14,10 @@ class IDNotFoundError(Exception):
         self.id = id
     pass
 
+# SourceVertexNotFoundError child class of IDNotFoundError
+class SourceVertexNotFoundError(IDNotFoundError):
+    pass
+
 
 class InputLengthDoesNotMatchError(Exception):
     def __init__(
@@ -91,32 +95,21 @@ class GraphProcessor:
         can be described using nodes. A graph can be described using graph matrix representation. Applying this format
         ensures compatibility with SciPy package
         """
-        ## put your implementation here
-        ## Check for conditions 1 - 5
+        ## Basic checks
         # 1. vertex_ids and edge_ids should be unique. (IDNotUniqueError)
-        vertex_set = set(vertex_ids)
-        edge_set = set(edge_ids)
-
         self._check_uniqueness(vertex_ids, edge_ids)
 
-        # 2. edge_vertex_id_pairs should have the same length as edge_ids
-        if len(vertex_ids) != len(edge_ids):
-            raise InputLengthDoesNotMatchError(len(vertex_ids), len(edge_ids), "vertex_ids and edge_ids do not contain same number of elements.")
+        # 2. vertex_edge_id_pairs should have the same length as edge_ids
+        self._check_length_edge_pairs(vertex_edge_id_pairs, edge_ids)
 
         # 3. vertex_edge_id_pairs should contain valid vertex ids. (IDNotFoundError)
-        for vertex, edge in vertex_edge_id_pairs:
-            if vertex not in vertex_set:
-                raise IDNotFoundError(f"Vertex {vertex} not found in vertex set.")
-            if edge not in edge_set:
-                raise IDNotFoundError(f"Edge {edge} not found in edge set.")
+        self._check_valid_vertex_edge_id_pairs(vertex_edge_id_pairs, vertex_ids, edge_ids)
 
         # 4. edge_enabled should have the same length as edge_ids.
-        if len(edge_ids) is not len(edge_enabled):
-            raise InputLengthDoesNotMatchError(len(edge_ids), len(edge_enabled), "edge_ids and edge_enabled do not contain same number of elements.")
+        self._check_length_edge_enabled(edge_enabled, edge_ids)
 
         # 5. source_vertex_id should be a valid vertex id. (IDNotFoundError)
-        if source_vertex_id not in vertex_set:
-            raise IDNotFoundError(source_vertex_id, "source_vertex_id not contained in vertex set.")
+        self._check_valid_source_vertex(source_vertex_id, vertex_ids)
 
         ## Build graph matrix
         graph = nx.Graph()
@@ -135,7 +128,7 @@ class GraphProcessor:
 
         pass
 
-    def _check_uniqueness(vertex_ids: list[int], edge_ids: list[int]):
+    def _check_uniqueness(vertex_ids: list[int], edge_ids: list[int]) -> None:
         vertex_set = set(vertex_ids)
         edge_set = set(edge_ids)
 
@@ -143,6 +136,39 @@ class GraphProcessor:
             raise IDNotUniqueError("vertex_ids are not unique.")
         if len(edge_set) != len(edge_ids):
             raise IDNotUniqueError("edge_ids are not unique.")
+
+    def _check_length_edge_pairs(vertex_edge_id_pairs: list[tuple[int, int]], edge_ids: list[int]) -> None:
+        if len(vertex_edge_id_pairs) != len(edge_ids):
+            raise InputLengthDoesNotMatchError(len(vertex_edge_id_pairs), len(edge_ids), "vertex_edge_id_pairs and edge_ids do not contain same number of elements.")
+
+    def _check_valid_vertex_edge_id_pairs(vertex_edge_id_pairs: list[tuple[int, int]], vertex_ids: list[int], edge_ids: list[int]) -> None:
+        vertex_set = set(vertex_ids)
+        edge_set = set(edge_ids)
+
+        for vertex, edge in vertex_edge_id_pairs:
+            if vertex not in vertex_set:
+                raise IDNotFoundError(f"Vertex {vertex} not found in vertex set.")
+            if edge not in edge_set:
+                raise IDNotFoundError(f"Edge {edge} not found in edge set.")
+        pass
+
+    def _check_length_edge_enabled(edge_enabled, edge_ids) -> None:
+        if len(edge_ids) is not len(edge_enabled):
+            raise InputLengthDoesNotMatchError(len(edge_ids), len(edge_enabled), "edge_ids and edge_enabled do not contain same number of elements.")
+        pass
+
+    def _check_valid_id(id: int, list: list[int]) -> None:
+        list_set = set(list)
+        if id not in list_set:
+            raise IDNotFoundError(id, f"id {id} not found in list.")
+        pass
+
+    def _check_valid_source_vertex(self, source_vertex_id: int, vertex_ids: list[int]) -> None:
+        try:
+            self._check_valid_id(source_vertex_id, vertex_ids)
+        except IDNotFoundError as IDError:
+            raise SourceVertexNotFoundError(source_vertex_id, f"source_vertex_id: {id} not found in vertex_ids.") from IDError
+        pass
 
     def find_downstream_vertices(self, edge_id: int) -> list[int]:
         """
