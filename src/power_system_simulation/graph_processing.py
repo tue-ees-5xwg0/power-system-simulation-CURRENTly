@@ -1,8 +1,9 @@
-from collections import defaultdict
+from collections import deque
 
 import networkx as nx
 import numpy as np
 import scipy.sparse as sp
+import scipy.sparse.csgraph as csgraph
 
 
 # IDNotFoundError child class of Exception class
@@ -10,43 +11,56 @@ class IDNotFoundError(Exception):
     def __init__(self, id: int, message: str) -> None:
         super().__init__(message)
         self.id = id
+
     pass
+
 
 # SourceVertexNotFoundError child class of IDNotFoundError
 class SourceVertexNotFoundError(IDNotFoundError):
     pass
+
 
 class InputLengthDoesNotMatchError(Exception):
     def __init__(self, first_length: int, second_length: int, message: str) -> None:
         super().__init__(message)
         self.first_length = first_length
         self.second_length = second_length
+
     pass
+
 
 class IDNotUniqueError(Exception):
     pass
 
+
 class VertexIDNotUnique(IDNotUniqueError):
     pass
 
+
 class EdgeIDNotUnique(IDNotUniqueError):
     pass
+
 
 class ImproperEdgeConnections(Exception):
     def __init__(self, edge_id: int | None, connections: int, message: str) -> None:
         super().__init__(message)
         self.edge_id = edge_id
         self.connections = connections
+
     pass
+
 
 class GraphNotFullyConnectedError(Exception):
     pass
 
+
 class GraphCycleError(Exception):
     pass
 
+
 class EdgeAlreadyDisabledError(Exception):
     pass
+
 
 class GraphProcessor:
     """
@@ -194,7 +208,49 @@ class GraphProcessor:
         Returns:
             A list of all downstream vertices.
         """
-        # put your implementation here
+        self._check_valid_id(edge_id, self.edge_ids)
+
+        # If the edge is disabled, we return an empty list.
+        if not self.edge_dict.get(edge_id):
+            return []
+
+        # Find the (u, v) endpoints of this edge by scanning vertex_edge_id_pairs
+        # in the same order as edge_ids.
+        edge_index = self.edge_ids.index(edge_id)
+        u, v = self.vertex_edge_id_pairs[edge_index]
+
+        # BFS from the source over the enabled subgraph (self.graph) to learn
+        # each vertex's parent. parent[source] is None.
+        parent: dict[int, int | None] = {self.source_vertex_id: None}
+        queue: deque = deque([self.source_vertex_id])
+        while queue:
+            node = queue.popleft()
+            for neighbour in self.graph.neighbors(node):
+                if neighbour not in parent:
+                    parent[neighbour] = node
+                    queue.append(neighbour)
+
+        # Whichever endpoint has the OTHER endpoint as its parent is the
+        # downstream root: the side of the edge facing away from the source.
+        if parent.get(v) == u:
+            downstream_root = v
+        elif parent.get(u) == v:
+            downstream_root = u
+        else:
+            return []
+
+        # Collect the entire subtree rooted at downstream_root.
+        subtree: list[int] = []
+        seen = {downstream_root}
+        queue = deque([downstream_root])
+        while queue:
+            node = queue.popleft()
+            subtree.append(node)
+            for neighbour in self.graph.neighbors(node):
+                if neighbour not in seen and parent.get(neighbour) == node:
+                    seen.add(neighbour)
+                    queue.append(neighbour)
+        return subtree
         pass
 
     # instance method
@@ -242,8 +298,11 @@ class GraphProcessor:
         if len(list_set) != len(list):
             raise IDNotUniqueError("Entries in list are not unique.")
 
-    @staticmethod #@staticmethod makes sure you can use methods of its own class. Be careful, declaring a static method
-    # means you cannot mutate instance variables any longer. Please see: GraphProcessor._check_uniqueness(vertex_ids)
+    # @staticmethod makes sure you can use methods of its own class.
+    # Be careful, declaring a static method
+    # means you cannot mutate instance variables any longer.
+    # Please see: GraphProcessor._check_uniqueness(vertex_ids)
+    @staticmethod
     def _check_uniqueness_edge_vertex(vertex_ids: list[int], edge_ids: list[int]) -> None:
         # Test vertex ids
         try:
@@ -272,18 +331,16 @@ class GraphProcessor:
         vertex_edge_id_pairs: list[tuple[int, int]], vertex_ids: list[int], edge_ids: list[int]
     ) -> None:
         vertex_set = set(vertex_ids)
-        edge_set = set(edge_ids)
 
-        for vertex, edge in vertex_edge_id_pairs:
-            if vertex not in vertex_set:
-                raise IDNotFoundError(f"Vertex {vertex} not found in vertex set.")
-            if edge not in edge_set:
-                raise IDNotFoundError(f"Edge {edge} not found in edge set.")
-        pass
+        for u, v in vertex_edge_id_pairs:
+            if u not in vertex_set:
+                raise IDNotFoundError(u, f"Vertex {u} not found in vertex set.")
+            if v not in vertex_set:
+                raise IDNotFoundError(v, f"Vertex {v} not found in vertex set.")
 
     @staticmethod
     def _check_length_edge_enabled(edge_enabled, edge_ids) -> None:
-        if len(edge_ids) is not len(edge_enabled):
+        if len(edge_ids) != len(edge_enabled):
             raise InputLengthDoesNotMatchError(
                 len(edge_ids), len(edge_enabled), "edge_ids and edge_enabled do not contain same number of elements."
             )
@@ -307,7 +364,7 @@ class GraphProcessor:
         pass
 
     @staticmethod
-    def _organise_id_state(edge_enabled: list[bool], edge_ids: list[int]) -> dict[int, bool]:
+    def _organise_id_state(edge_ids: list[int], edge_enabled: list[bool]) -> dict[int, bool]:
         # 1. edge_ids should be unique.
         GraphProcessor._check_uniqueness(edge_ids)
 
@@ -315,7 +372,7 @@ class GraphProcessor:
         GraphProcessor._check_length_edge_enabled(edge_enabled, edge_ids)
 
         # Build dictionary
-        edge_dict: dict[int, bool] = defaultdict()
+        edge_dict: dict[int, bool] = {}
 
         for i in range(len(edge_enabled)):
             edge_dict[edge_ids[i]] = edge_enabled[i]
@@ -324,38 +381,22 @@ class GraphProcessor:
 
     @staticmethod
     def _pair_vertices(
-        vertex_edge_id_pairs: list[tuple[int, int]], edge_dict: dict[int, bool]
+        vertex_edge_id_pairs: list[tuple[int, int]],
+        edge_ids: list[int],
+        edge_dict: dict[int, bool],
     ) -> list[tuple[int, int]]:
-        # Create dictionary with edge connections along with list of connected vertices
-        edge_connected: dict[int, list[int]] = defaultdict()
-        for vertex_id, edge_id in vertex_edge_id_pairs:
-            edge_connected[edge_id].append(vertex_id)
-
         # Pair nodes specified by edge_connected
         connectivity: list[tuple[int, int]] = []
-        for edge_id in edge_connected.keys():
+        for edge_id, (u, v) in zip(edge_ids, vertex_edge_id_pairs):
             # Check for improper number of connections
-            edge_connections = edge_connected.get(edge_id)
-            num_connections = len(edge_connections)
-            if num_connections != 2:
-                raise ImproperEdgeConnections(
-                    edge_id,
-                    num_connections,
-                    f"Edge {edge_id} has {num_connections} connections, any edge can only be connected to 2 vertices.",
-                )
-
-            # Check if edge_id is enabled
-            if not edge_dict.get(edge_id):
-                continue
-
-            # Add nodes to connectivity matrix
-            connectivity.append(tuple(edge_connections))
-
+            if edge_dict.get(edge_id):
+                connectivity.append((u, v))
         return connectivity
 
     @staticmethod
-    def _self_build_graph(connectivity: list[tuple[int, int]]) -> nx.classes.graph.Graph:
+    def _self_build_graph(connectivity: list[tuple[int, int]], vertex_ids: list[int]) -> nx.classes.graph.Graph:
         graph = nx.Graph()
+        graph.add_nodes_from(vertex_ids)
         graph.add_edges_from(connectivity)
         return graph
 
@@ -365,24 +406,26 @@ class GraphProcessor:
 
     @staticmethod
     def _check_graph_connected(graph: sp._csr.csr_array) -> None:
-        n_components, _ = sp.connected_components(graph)
+        n_components, _ = csgraph.connected_components(graph)
         if n_components != 1:
             raise GraphNotFullyConnectedError("Provided graph is not singelton.")
         pass
 
     @staticmethod
     def _check_contain_cycles(graph: nx.classes.graph.Graph) -> None:
-        cycles = list(nx.find_cycles(graph))
-        if not cycles.count() == 0:
-            raise GraphCycleError("Graph contains cycles")
+        try:
+            nx.find_cycle(graph)
+        except nx.exception.NetworkXNoCycle:
+            return
+        raise GraphCycleError("Graph contains cycles")
 
-    #instancemethod
+    # instancemethod
     def _update_graph(self) -> None:
         # Determine connectivity matrix
-        connectivity = GraphProcessor._pair_vertices(self.vertex_edge_id_pairs, self.edge_dict)
+        connectivity = GraphProcessor._pair_vertices(self.vertex_edge_id_pairs, self.edge_ids, self.edge_dict)
 
         # Connect vertices
-        graph = GraphProcessor._self_build_graph(connectivity)
+        graph = GraphProcessor._self_build_graph(connectivity, self.vertex_ids)
 
         ## Graph checks
         # 6. The graph should be fully connected.
