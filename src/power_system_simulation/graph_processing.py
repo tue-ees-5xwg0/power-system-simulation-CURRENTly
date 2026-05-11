@@ -260,7 +260,7 @@ class GraphProcessor:
 
     @staticmethod
     def _check_length_edge_pairs(vertex_edge_id_pairs: list[tuple[int, int]], edge_ids: list[int]) -> None:
-        if len(vertex_edge_id_pairs) != len(edge_ids):
+        if len(vertex_edge_id_pairs) != 2*len(edge_ids):
             raise InputLengthDoesNotMatchError(
                 len(vertex_edge_id_pairs),
                 len(edge_ids),
@@ -282,7 +282,7 @@ class GraphProcessor:
         pass
 
     @staticmethod
-    def _check_length_edge_enabled(edge_enabled, edge_ids) -> None:
+    def _check_length_edge_enabled(edge_enabled: list[bool], edge_ids: list[int]) -> None:
         if len(edge_ids) is not len(edge_enabled):
             raise InputLengthDoesNotMatchError(
                 len(edge_ids), len(edge_enabled), "edge_ids and edge_enabled do not contain same number of elements."
