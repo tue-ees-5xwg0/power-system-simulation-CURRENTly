@@ -130,3 +130,120 @@ def test_cycle_raises():
             edge_enabled=[True, True, True],
             source_vertex_id=0,
         )
+
+
+def _docstring_graph():
+    """The graph from the find_alternative_edges docstring."""
+    return gp.GraphProcessor(
+        vertex_ids=[0, 2, 4, 6, 10],
+        edge_ids=[1, 3, 5, 7, 8, 9],
+        vertex_edge_id_pairs=[
+            (0, 2),  # 1  enabled
+            (0, 4),  # 3  enabled
+            (0, 6),  # 5  enabled
+            (2, 4),  # 7  disabled
+            (4, 6),  # 8  disabled
+            (2, 10),  # 9  enabled
+        ],
+        edge_enabled=[True, True, True, False, False, True],
+        source_vertex_id=0,
+    )
+
+
+def test_alternatives_edge_1():
+    g = _docstring_graph()
+    assert sorted(g.find_alternative_edges(1)) == [7]
+
+
+def test_alternatives_edge_3():
+    g = _docstring_graph()
+    assert sorted(g.find_alternative_edges(3)) == [7, 8]
+
+
+def test_alternatives_edge_5():
+    g = _docstring_graph()
+    assert sorted(g.find_alternative_edges(5)) == [8]
+
+
+def test_alternatives_edge_9_no_options():
+    g = _docstring_graph()
+    assert g.find_alternative_edges(9) == []
+
+
+def test_alternatives_disabled_edge_raises():
+    g = _docstring_graph()
+    with pytest.raises(gp.EdgeAlreadyDisabledError):
+        g.find_alternative_edges(7)
+
+
+def test_alternatives_unknown_edge_raises():
+    g = _docstring_graph()
+    with pytest.raises(gp.IDNotFoundError):
+        g.find_alternative_edges(999)
+
+
+# Tests for the bonus methods (add_disabled_edges_from, toggle_edge)
+
+
+def test_toggle_edge_unknown_id_raises():
+    g = _simple_chain()
+    with pytest.raises(gp.IDNotFoundError):
+        g.toggle_edge(999, False)
+
+
+def test_toggle_edge_same_value_raises():
+    g = _simple_chain()
+    # edge 1 is already True; toggling it to True should raise
+    with pytest.raises(gp.EdgeAlreadyDisabledError):
+        g.toggle_edge(1, True)
+
+
+def test_add_disabled_edges_same_state_raises():
+    g = _simple_chain()
+    with pytest.raises(gp.EdgeAlreadyDisabledError):
+        g.add_disabled_edges_from([True, True])
+
+
+def test_add_disabled_edges_length_mismatch_raises():
+    g = _simple_chain()
+    with pytest.raises(gp.InputLengthDoesNotMatchError):
+        g.add_disabled_edges_from([True])
+
+
+def test_downstream_returns_empty_for_disabled_edge():
+    # A graph with one disabled edge (edge 5).
+    # find_downstream_vertices on edge 5 should return [].
+    g = gp.GraphProcessor(
+        vertex_ids=[0, 2, 4],
+        edge_ids=[1, 3, 5],
+        vertex_edge_id_pairs=[(0, 2), (2, 4), (0, 4)],
+        edge_enabled=[True, True, False],
+        source_vertex_id=0,
+    )
+    assert g.find_downstream_vertices(5) == []
+
+
+def test_source_vertex_not_found_raises():
+    with pytest.raises(gp.SourceVertexNotFoundError):
+        gp.GraphProcessor(
+            vertex_ids=[0, 2, 4],
+            edge_ids=[1, 3],
+            vertex_edge_id_pairs=[(0, 2), (2, 4)],
+            edge_enabled=[True, True],
+            source_vertex_id=999,
+        )
+
+
+def test_add_disabled_edges_updates_state():
+    # Start with all 3 edges enabled (which would be a cycle, so we
+    # need a graph where disabling one is still valid).
+    g = gp.GraphProcessor(
+        vertex_ids=[0, 2, 4],
+        edge_ids=[1, 3, 5],
+        vertex_edge_id_pairs=[(0, 2), (2, 4), (0, 4)],
+        edge_enabled=[True, True, False],
+        source_vertex_id=0,
+    )
+    # Swap which edge is disabled: now edge 3 is off, edge 5 is on.
+    g.add_disabled_edges_from([True, False, True])
+    assert g.edge_enabled == [True, False, True]

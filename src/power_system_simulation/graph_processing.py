@@ -289,8 +289,27 @@ class GraphProcessor:
         Returns:
             A list of alternative edge ids.
         """
-        # put your implementation here
-        pass
+        # Check the edge id exists
+        self._check_valid_id(disabled_edge_id, self.edge_ids)
+
+        # If it's already disabled, that's an error
+        if not self.edge_dict.get(disabled_edge_id):
+            raise EdgeAlreadyDisabledError(f"Edge {disabled_edge_id} is already disabled.")
+
+        # Vertices on the "downstream" side of the edge
+        downstream_set = set(self.find_downstream_vertices(disabled_edge_id))
+
+        # A disabled edge bridges the gap if exactly one endpoint
+        # is in the downstream set
+        alternatives: list[int] = []
+        for edge_id, (u, v) in zip(self.edge_ids, self.vertex_edge_id_pairs, strict=True):
+            if self.edge_dict.get(edge_id):
+                continue  # skip enabled edges
+            u_inside = u in downstream_set
+            v_inside = v in downstream_set
+            if u_inside != v_inside:
+                alternatives.append(edge_id)
+        return alternatives
 
     @staticmethod
     def _check_uniqueness(list: list[int]) -> None:
@@ -387,7 +406,7 @@ class GraphProcessor:
     ) -> list[tuple[int, int]]:
         # Pair nodes specified by edge_connected
         connectivity: list[tuple[int, int]] = []
-        for edge_id, (u, v) in zip(edge_ids, vertex_edge_id_pairs):
+        for edge_id, (u, v) in zip(edge_ids, vertex_edge_id_pairs, strict=True):
             # Check for improper number of connections
             if edge_dict.get(edge_id):
                 connectivity.append((u, v))
