@@ -2,6 +2,19 @@
 
 This is a student project for Power System Simulation.
 
+## Github commands
+Cloning:
+-Clone repository: Git clone [link]
+
+Refresh:
+-switch branches: git checkout [branch]
+-synchronize branch with online version: git pull
+-fetch all branches: git fetch --all
+
+Create branch:
+-create branch: git branch
+-check working directory: git status
+
 ## Installation
 
 This project uses [uv](https://docs.astral.sh/uv/) for dependency management.
