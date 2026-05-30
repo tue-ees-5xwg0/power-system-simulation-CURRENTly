@@ -1,6 +1,8 @@
 from json import load
 from pathlib import Path
 
+import pandas as pd
+
 
 # Error classes
 class FileNotFoundError(Exception):
@@ -21,6 +23,12 @@ class MultipleSourcesError(Exception):
 class IdNotUniqueError(Exception):
     pass
 
+class UnusedNodesError(Exception):
+    pass
+
+class TooFewNodesError(Exception):
+    pass
+
 # Object structures
 
 class PowerNode:
@@ -29,7 +37,8 @@ class PowerNode:
         pass
 
 class PowerLine:
-    def __init__(self, from_node: int, to_node: int, from_status: int, to_status: int, r1: float, x1: float, c1: float, tan1: float, i_n: float) -> None:
+    def __init__(self, from_node: int, to_node: int, from_status: int, to_status: int, r1: float, x1: float, c1: float,
+                 tan1: float, i_n: float) -> None:
         self.from_node: int = from_node
         self.to_node: int = to_node
         self.from_status: int = from_status
@@ -88,7 +97,7 @@ class PowerGridModelData:
         PowerGridModelData._does_file_exist(self.p_profile_path)
         PowerGridModelData._does_file_exist(self.q_profile_path)
 
-        # Parse file network
+        # Parse network
         with open(self.network_path, encoding='utf-8') as file:
             network_data = load(file).get("data", {})
 
@@ -104,6 +113,19 @@ class PowerGridModelData:
         # Check for data consistency and integrity
         PowerGridModelData._CheckSingleSource(self.source) # Check for single source
         PowerGridModelData._CheckUniqueIds(self.nodes, self.lines, self.load, self.source) # Check for unique IDs
+        PowerGridModelData._CheckNodeUsage(self.nodes, self.source, self.load) # Check node usage
+
+        load_ids: list[int] = PowerGridModelData._ListLoadIds(self.load)
+
+        # parse power profiles
+        active_power_df = pd.read_parquet(self.p_profile_path)
+        reactive_power_df = pd.read_parquet(self.q_profile_path)
+
+
+
+        # TODO: Senity checks on how power profiles and network data align (e.g. load ids in profiles should match load
+        # ids in network data)
+
 
         # Set is_populated to True if parsing is successful, otherwise False
 
@@ -175,7 +197,8 @@ class PowerGridModelData:
             i_n = float(entry["i_n"])
 
             # Create PowerLine object and add to lines dictionary
-            lines[id] = PowerLine(from_node=from_node, to_node=to_node, from_status=from_status, to_status=to_status, r1=r1, x1=x1, c1=c1, tan1=tan1, i_n=i_n)
+            lines[id] = PowerLine(from_node=from_node, to_node=to_node, from_status=from_status, to_status=to_status,
+                                  r1=r1, x1=x1, c1=c1, tan1=tan1, i_n=i_n)
         return lines
 
     @staticmethod
@@ -228,7 +251,8 @@ class PowerGridModelData:
         return True
 
     @staticmethod
-    def _CheckUniqueIds(nodes: dict[int, PowerNode], lines: dict[int, PowerLine], loads: dict[int, PowerLoad], sources: dict[int, PowerSource]) -> None:
+    def _CheckUniqueIds(nodes: dict[int, PowerNode], lines: dict[int, PowerLine], loads: dict[int, PowerLoad],
+                        sources: dict[int, PowerSource]) -> None:
         all_ids = []
         all_ids.extend(nodes.keys())
         all_ids.extend(lines.keys())
@@ -237,6 +261,23 @@ class PowerGridModelData:
         if len(all_ids) != len(set(all_ids)):
             raise IdNotUniqueError("Duplicate IDs found across nodes, lines, loads, or sources. All IDs must be unique.")
         return
+
+    @staticmethod
+    def _CheckNodeUsage(nodes: dict[int, PowerNode], sources: dict[int, PowerSource], loads: dict[int, PowerLoad]) -> None:
+        used_nodes = []
+        used_nodes.extend(sources.keys())
+        used_nodes.extend(loads.keys())
+
+        available_nodes = nodes.keys()
+        if len(set(used_nodes)) > len(set(available_nodes)):
+            raise TooFewNodesError("Number of loads and sources exceeds the number of available nodes. Each load and source must be connected to a single node.")
+        if len(set(used_nodes)) < len(set(available_nodes)):
+            raise UnusedNodesError("There are nodes in the network that are not connected to any load or source. All nodes must be utilized.")
+        return
+
+    @staticmethod
+    def _ListLoadIds(loads: dict[int, PowerLoad]) -> list[int]:
+        return list(loads.keys())
 
 
 
