@@ -29,6 +29,12 @@ class UnusedNodesError(Exception):
 class TooFewNodesError(Exception):
     pass
 
+class DataInconformationError(Exception):
+    pass
+
+class TimeStampNotFoundError(Exception):
+    pass
+
 # Object structures
 
 class PowerNode:
@@ -118,16 +124,71 @@ class PowerGridModelData:
         load_ids: list[int] = PowerGridModelData._ListLoadIds(self.load)
 
         # parse power profiles
-        active_power_df = pd.read_parquet(self.p_profile_path)
-        reactive_power_df = pd.read_parquet(self.q_profile_path)
+        active_power_df: pd.DataFrame = pd.read_parquet(self.p_profile_path)
+        reactive_power_df: pd.DataFrame = pd.read_parquet(self.q_profile_path)
 
+        # Find specified load ids in the headers of the dataframes
+        active_power_headers: list[str] = PowerGridModelData._GetDataframeHeaders(active_power_df)
+        reactive_power_headers: list[str] = PowerGridModelData._GetDataframeHeaders(reactive_power_df)
 
+        # Match parquet headers to load ids specified in the network data
+        PowerGridModelData._CheckHeaderMatchLoadIds(active_power_headers, load_ids)
+        PowerGridModelData._CheckHeaderMatchLoadIds(reactive_power_headers, load_ids)
 
-        # TODO: Senity checks on how power profiles and network data align (e.g. load ids in profiles should match load
-        # ids in network data)
+        # Check that dataframes contain equal number of entries
+        PowerGridModelData._CheckRowEntriesMatch(active_power_df, reactive_power_df)
 
+        # Check that timestamps are unique
+        PowerGridModelData._CheckUniqueTimestamps(active_power_df)
+        PowerGridModelData._CheckUniqueTimestamps(reactive_power_df)
+
+        # Check that dataframes contain the same timestamps
+        PowerGridModelData._CheckSameTimestamps(active_power_df, reactive_power_df)
+
+        # Populate power profiles dictionary with data from dataframes
+        Timestamp_list: list[str] = PowerGridModelData._GetDataframeTimestampslist(active_power_df)
+        for timestamp in Timestamp_list:
+            self.p_profile[timestamp] = PowerGridModelData._GetPowerProfileForTimestamp(active_power_df, timestamp)
+            self.q_profile[timestamp] = PowerGridModelData._GetPowerProfileForTimestamp(reactive_power_df, timestamp)
 
         # Set is_populated to True if parsing is successful, otherwise False
+        self.is_populated = True
+        return
+
+    @staticmethod
+    def GetPowerFromTimestamp(df: pd.DataFrame, timestamp: str) -> PowerProfilePerTimestamp:
+        PowerGridModelData._CheckTimestampExists(df, timestamp)
+        return PowerGridModelData._GetPowerProfileForTimestamp(df, timestamp)
+
+    # instance method
+    def GetNodeIds(self) -> list[int]:
+        return list(self.nodes.keys())
+
+    # instance method
+    def GetLineIds(self) -> list[int]:
+        return list(self.lines.keys())
+
+    # instance method
+    def GetLoadIds(self) -> list[int]:
+        return list(self.load.keys())
+
+    # instance method
+    # Returns list to maintain consistency and possible future extension to multiple sources
+    def GetSourceIds(self) -> list[int]:
+        return list(self.source.keys())
+
+    # instance method
+    def GetTimestamps(self) -> list[str]:
+        return list(self.p_profile.keys())
+
+    # instance method
+    # WARNING: This method assumes that nodes correspond to graph nodes and lines correspond to graph edges.
+    def GetVertexEdgeIdPairs(self) -> list[tuple[int, int]]:
+        vertex_edge_pairs = []
+        for line_id, line_param in self.lines.items():
+            vertex_edge_pairs.append((line_param.from_node, line_id))
+            vertex_edge_pairs.append((line_param.to_node, line_id))
+        return vertex_edge_pairs
 
     @staticmethod
     def _does_file_exist(path_str: str) -> bool:
@@ -279,5 +340,77 @@ class PowerGridModelData:
     def _ListLoadIds(loads: dict[int, PowerLoad]) -> list[int]:
         return list(loads.keys())
 
+    @staticmethod
+    def _GetDataframeHeaders(df: pd.DataFrame) -> list[int]:
+        headers_list = df.columns.tolist()
+        return headers_list
+
+    @staticmethod
+    def _CheckHeaderMatchLoadIds(headers: list[int], load_ids: list[int]) -> None:
+        headers_set = set(headers)
+        load_ids_set = set(load_ids)
+
+        if not load_ids_set.issubset(headers_set):
+            missing_ids = load_ids_set - headers_set
+            raise DataInconformationError(f"The following load IDs specified in the network data are missing from the power profile data: {missing_ids}")
+
+        if not headers_set.issubset(load_ids_set):
+            extra_headers = headers_set - load_ids_set
+            raise DataInconformationError(f"The following headers in the power profile data do not match any load IDs specified in the network data: {extra_headers}")
+        return
+
+    @staticmethod
+    def _CheckDataframeRowentries(df: pd.Dataframe) -> int:
+        rowEntries = len(df)
+
+        if rowEntries < 1:
+            raise FileEmptyError("Power profile data does not contain any entries.")
+
+        return rowEntries
+
+    @staticmethod
+    def _CheckRowEntriesMatch(df1: pd.DataFrame, df2: pd.DataFrame) -> None:
+        rowEntries1 = PowerGridModelData._CheckDataframeRowentries(df1)
+        rowEntries2 = PowerGridModelData._CheckDataframeRowentries(df2)
+
+        if rowEntries1 != rowEntries2:
+            raise DataInconformationError(f"The number of entries in the active power profile ({rowEntries1}) does not match the number of entries in the reactive power profile ({rowEntries2}). Both profiles must contain the same number of entries.")
+        return
+
+    @staticmethod
+    def _GetDataframeTimestampslist(df: pd.DataFrame) -> list[str]:
+        timestamps_list = df.index.strftime('%d-%b-%Y %H:%M:%S').tolist()
+        return timestamps_list
+
+    @staticmethod
+    def _CheckUniqueTimestamps(df: pd.DataFrame) -> None:
+        timestamps = PowerGridModelData._GetDataframeTimestampslist(df)
+        if len(timestamps) != len(set(timestamps)):
+            raise DataInconformationError("Duplicate timestamps found in the power profile data. All timestamps must be unique.")
+        return
+
+    @staticmethod
+    def _CheckSameTimestamps(df1: pd.DataFrame, df2: pd.DataFrame) -> None:
+        timestamps1 = PowerGridModelData._GetDataframeTimestampslist(df1)
+        timestamps2 = PowerGridModelData._GetDataframeTimestampslist(df2)
+
+        if set(timestamps1) != set(timestamps2):
+            raise DataInconformationError("The timestamps in the active power profile do not match the timestamps in the reactive power profile. Both profiles must contain the same timestamps.")
+        return
+
+    @staticmethod
+    def _CheckTimestampExists(df: pd.DataFrame, timestamp: str) -> None:
+        timestamps = PowerGridModelData._GetDataframeTimestampslist(df)
+        if timestamp not in timestamps:
+            raise TimeStampNotFoundError(f"Timestamp {timestamp} not found in the power profile data.")
+        return
+
+    @staticmethod
+    def _GetPowerProfileForTimestamp(df: pd.DataFrame, timestamp: str) -> PowerProfilePerTimestamp:
+        row = df.loc[df.index.strftime('%d-%b-%Y %H:%M:%S') == timestamp]
+
+        node_power: dict[int, float] = row.to_dict()
+
+        return PowerProfilePerTimestamp(node_power=node_power)
 
 
