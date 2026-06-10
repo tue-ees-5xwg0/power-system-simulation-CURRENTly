@@ -375,12 +375,12 @@ class PowerGridModelData:
         available_nodes = nodes.keys()
         if len(set(used_nodes)) > len(set(available_nodes)):
             raise TooFewNodesError(
-                "Number of loads and sources exceeds the number of available nodes. Each load and source must be " \
+                "Number of loads and sources exceeds the number of available nodes. Each load and source must be "
                 "connected to a single node."
             )
         if len(set(used_nodes)) < len(set(available_nodes)):
             raise UnusedNodesError(
-                "There are nodes in the network that are not connected to any load or source. All nodes must be" \
+                "There are nodes in the network that are not connected to any load or source. All nodes must be"
                 " utilized."
             )
         return
@@ -402,20 +402,20 @@ class PowerGridModelData:
         if not load_ids_set.issubset(headers_set):
             missing_ids = load_ids_set - headers_set
             raise DataInconformationError(
-                "The following load IDs specified in the network data are missing from the power" \
+                "The following load IDs specified in the network data are missing from the power"
                 f" profile data: {missing_ids}"
             )
 
         if not headers_set.issubset(load_ids_set):
             extra_headers = headers_set - load_ids_set
             raise DataInconformationError(
-                "The following headers in the power profile data do not match any load IDs specified in" \
+                "The following headers in the power profile data do not match any load IDs specified in"
                 f"the network data: {extra_headers}"
             )
         return
 
     @staticmethod
-    def _CheckDataframeRowentries(df: pd.Dataframe) -> int:
+    def _CheckDataframeRowentries(df: pd.DataFrame) -> int:
         rowEntries = len(df)
 
         if rowEntries < 1:
@@ -430,8 +430,8 @@ class PowerGridModelData:
 
         if rowEntries1 != rowEntries2:
             raise DataInconformationError(
-                f"The number of entries in the active power profile ({rowEntries1}) does not match the number of" /
-                f"entries in the reactive power profile ({rowEntries2})." /
+                f"The number of entries in the active power profile ({rowEntries1}) does not match the number of"
+                f"entries in the reactive power profile ({rowEntries2})."
                 "Both profiles must contain the same number of entries."
             )
         return
@@ -457,7 +457,7 @@ class PowerGridModelData:
 
         if set(timestamps1) != set(timestamps2):
             raise DataInconformationError(
-                "The timestamps in the active power profile do not match the timestamps in the reactive power" \
+                "The timestamps in the active power profile do not match the timestamps in the reactive power"
                 " profile. Both profiles must contain the same timestamps."
             )
         return
