@@ -32,10 +32,7 @@ from power_grid_model import (
     initialize_array,
 )
 from power_grid_model.utils import json_deserialize
-from power_grid_model.validation import (
-    assert_valid_batch_data,
-    assert_valid_input_data,
-)
+from power_grid_model.validation import assert_valid_batch_data, assert_valid_input_data
 
 # ---------------------------------------------------------------------------
 # Custom exceptions for the cross-file checks
@@ -208,3 +205,64 @@ class PowerFlowRunner:
             update_data=self.update_data,
         )
         return self.output_data
+    # ------------------------------------------------------------------ #
+    # Step 5 -  creating the 2 tables                    #
+    # ------------------------------------------------------------------ #
+    def aggregate_power_flow(self) -> pd.DataFrame:
+        """"Table with each row representing a timestamp
+        Maxium pu voltage of all nodes, minimum pu voltage of all nodes, id of the node with maximum voltage, id of the
+        node with minimum voltage
+        """
+        if self.output_data is None:
+            raise RuntimeError("Call run() before aggregate_power_flow().")
+
+        # Extract the relevant arrays from the output data.
+        node_ids = self.output_data[ComponentType.node]["id"][0]
+        voltage_pu = self.output_data[ComponentType.node]["u_pu"]
+
+        # Compute the max and min voltage and their corresponding node IDs.
+        max_voltage = np.max(voltage_pu, axis=1)
+        min_voltage = np.min(voltage_pu, axis=1)
+        max_voltage_node_id = node_ids[np.argmax(voltage_pu, axis=1)]
+        min_voltage_node_id = node_ids[np.argmin(voltage_pu, axis=1)]
+
+        # Create a DataFrame to hold the results.
+        timestamps = self.active_profile.index  # Assuming timestamps are the same as in the profiles
+        result_df = pd.DataFrame({
+            'Maximum voltage (pu)': max_voltage,
+            'Maximum voltage node ID': max_voltage_node_id,
+            'Minimum voltage (pu)': min_voltage,
+            'Minimum voltage node ID': min_voltage_node_id,
+        }, index=timestamps)
+        return result_df
+    def node_table(self) -> pd.DataFrame:
+        """" Line id, energy loss of the line in kWh, maximum loading in pu, timestamp of maximum loading, miniming
+          loading and minimum loading moment
+        """
+        if self.output_data is None:
+            raise RuntimeError("Call run() before node_table().")
+
+        # Extract the relevant arrays from the output data.
+        line_ids = self.output_data[ComponentType.line]["id"][0]
+        p_from = self.output_data[ComponentType.line]["p_from"]
+        p_to = self.output_data[ComponentType.line]["p_to"]
+        p_loss = np.abs(p_from + p_to)  # loss = power in minus power out
+        loading_pu = self.output_data[ComponentType.line]["loading"]
+        timestamps = self.active_profile.index
+        t_seconds = timestamps.astype(np.int64).to_numpy()/ 1e9  # Convert timestamps to seconds since epoch
+        energy_loss_ws = np.trapezoid(p_loss, x=t_seconds, axis=0)
+        energy_loss_kWh = energy_loss_ws / 3.6e6  # Convert watt-seconds to kWh
+
+        max_loading = loading_pu.max(axis=0)
+        timestamp_max_loading = timestamps[np.argmax(loading_pu, axis=0)]
+        min_loading = loading_pu.min(axis=0)
+        timestamp_min_loading = timestamps[np.argmin(loading_pu, axis=0)]
+
+        result_df = pd.DataFrame({
+            'Energy loss (kWh)': energy_loss_kWh,
+            'Maximum loading (pu)': max_loading,
+            'Timestamp of maximum loading': timestamp_max_loading,
+            'Minimum loading (pu)': min_loading,
+            'Timestamp of minimum loading': timestamp_min_loading,
+        }, index=line_ids)
+        return result_df
