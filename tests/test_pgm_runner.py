@@ -10,20 +10,10 @@ from pathlib import Path
 import numpy as np
 import pandas as pd
 import pytest
-from power_grid_model import (
-    AttributeType,
-    ComponentType,
-    DatasetType,
-    LoadGenType,
-    initialize_array,
-)
+from power_grid_model import AttributeType, ComponentType, DatasetType, LoadGenType, initialize_array
 from power_grid_model.utils import json_serialize
 
-from power_system_simulation.pgm_runner import (
-    PowerFlowRunner,
-    ProfileLoadIdError,
-    ProfileMismatchError,
-)
+from power_system_simulation.pgm_runner import PowerFlowRunner, ProfileLoadIdError, ProfileMismatchError
 
 # ---------------------------------------------------------------------------
 # Tiny synthetic grid:  source(10) -- node(1) -- line(3) -- node(2) -- sym_load(4)
@@ -230,3 +220,55 @@ def test_malformed_network_json_raises(tmp_path: Path):
     runner = PowerFlowRunner(bad, active, reactive)
     with pytest.raises(Exception):  # noqa: B017, BLE001
         runner.load_network()
+
+def test_aggregate_power_flow(tmp_path: Path):
+    network = _write_network(tmp_path)
+    active, reactive = _write_profiles(tmp_path)
+    runner = PowerFlowRunner(network, active, reactive)
+    runner.run()
+    df = runner.aggregate_power_flow()
+
+    # Should have one row per timestamp
+    assert len(df) == 3
+    # Should have the right columns
+    assert "Maximum voltage (pu)" in df.columns
+    assert "Maximum voltage node ID" in df.columns
+    assert "Minimum voltage (pu)" in df.columns
+    assert "Minimum voltage node ID" in df.columns
+    # Max voltage should always be >= min voltage
+    assert (df["Maximum voltage (pu)"] >= df["Minimum voltage (pu)"]).all()
+
+
+def test_node_table(tmp_path: Path):
+    network = _write_network(tmp_path)
+    active, reactive = _write_profiles(tmp_path)
+    runner = PowerFlowRunner(network, active, reactive)
+    runner.run()
+    df = runner.node_table()
+
+    # Should have one row per line (only 1 line in tiny network)
+    assert len(df) == 1
+    # Should have the right columns
+    assert "Energy loss (kWh)" in df.columns
+    assert "Maximum loading (pu)" in df.columns
+    assert "Minimum loading (pu)" in df.columns
+    # Energy loss should be positive
+    assert (df["Energy loss (kWh)"] >= 0).all()
+    # Max loading should be >= min loading
+    assert (df["Maximum loading (pu)"] >= df["Minimum loading (pu)"]).all()
+
+
+def test_aggregate_power_flow_before_run_raises(tmp_path: Path):
+    network = _write_network(tmp_path)
+    active, reactive = _write_profiles(tmp_path)
+    runner = PowerFlowRunner(network, active, reactive)
+    with pytest.raises(RuntimeError):
+        runner.aggregate_power_flow()
+
+
+def test_node_table_before_run_raises(tmp_path: Path):
+    network = _write_network(tmp_path)
+    active, reactive = _write_profiles(tmp_path)
+    runner = PowerFlowRunner(network, active, reactive)
+    with pytest.raises(RuntimeError):
+        runner.node_table()
