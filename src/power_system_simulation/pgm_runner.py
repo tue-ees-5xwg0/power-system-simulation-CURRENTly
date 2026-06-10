@@ -205,11 +205,12 @@ class PowerFlowRunner:
             update_data=self.update_data,
         )
         return self.output_data
+
     # ------------------------------------------------------------------ #
     # Step 5 -  creating the 2 tables                    #
     # ------------------------------------------------------------------ #
     def aggregate_power_flow(self) -> pd.DataFrame:
-        """"Table with each row representing a timestamp
+        """ "Table with each row representing a timestamp
         Maxium pu voltage of all nodes, minimum pu voltage of all nodes, id of the node with maximum voltage, id of the
         node with minimum voltage
         """
@@ -228,16 +229,20 @@ class PowerFlowRunner:
 
         # Create a DataFrame to hold the results.
         timestamps = self.active_profile.index  # Assuming timestamps are the same as in the profiles
-        result_df = pd.DataFrame({
-            'Maximum voltage (pu)': max_voltage,
-            'Maximum voltage node ID': max_voltage_node_id,
-            'Minimum voltage (pu)': min_voltage,
-            'Minimum voltage node ID': min_voltage_node_id,
-        }, index=timestamps)
+        result_df = pd.DataFrame(
+            {
+                "Maximum voltage (pu)": max_voltage,
+                "Maximum voltage node ID": max_voltage_node_id,
+                "Minimum voltage (pu)": min_voltage,
+                "Minimum voltage node ID": min_voltage_node_id,
+            },
+            index=timestamps,
+        )
         return result_df
+
     def node_table(self) -> pd.DataFrame:
-        """" Line id, energy loss of the line in kWh, maximum loading in pu, timestamp of maximum loading, miniming
-          loading and minimum loading moment
+        """ " Line id, energy loss of the line in kWh, maximum loading in pu, timestamp of maximum loading, miniming
+        loading and minimum loading moment
         """
         if self.output_data is None:
             raise RuntimeError("Call run() before node_table().")
@@ -249,7 +254,7 @@ class PowerFlowRunner:
         p_loss = np.abs(p_from + p_to)  # loss = power in minus power out
         loading_pu = self.output_data[ComponentType.line]["loading"]
         timestamps = self.active_profile.index
-        t_seconds = timestamps.astype(np.int64).to_numpy()/ 1e9  # Convert timestamps to seconds since epoch
+        t_seconds = timestamps.astype(np.int64).to_numpy() / 1e9  # Convert timestamps to seconds since epoch
         energy_loss_ws = np.trapezoid(p_loss, x=t_seconds, axis=0)
         energy_loss_kWh = energy_loss_ws / 3.6e6  # Convert watt-seconds to kWh
 
@@ -258,11 +263,14 @@ class PowerFlowRunner:
         min_loading = loading_pu.min(axis=0)
         timestamp_min_loading = timestamps[np.argmin(loading_pu, axis=0)]
 
-        result_df = pd.DataFrame({
-            'Energy loss (kWh)': energy_loss_kWh,
-            'Maximum loading (pu)': max_loading,
-            'Timestamp of maximum loading': timestamp_max_loading,
-            'Minimum loading (pu)': min_loading,
-            'Timestamp of minimum loading': timestamp_min_loading,
-        }, index=line_ids)
+        result_df = pd.DataFrame(
+            {
+                "Energy loss (kWh)": energy_loss_kWh,
+                "Maximum loading (pu)": max_loading,
+                "Timestamp of maximum loading": timestamp_max_loading,
+                "Minimum loading (pu)": min_loading,
+                "Timestamp of minimum loading": timestamp_min_loading,
+            },
+            index=line_ids,
+        )
         return result_df

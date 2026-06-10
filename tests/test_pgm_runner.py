@@ -221,6 +221,7 @@ def test_malformed_network_json_raises(tmp_path: Path):
     with pytest.raises(Exception):  # noqa: B017, BLE001
         runner.load_network()
 
+
 def test_aggregate_power_flow(tmp_path: Path):
     network = _write_network(tmp_path)
     active, reactive = _write_profiles(tmp_path)
