@@ -9,42 +9,64 @@ class FileNotFoundError(Exception):
     def __init__(self, path: str, message: str) -> None:
         super().__init__(message)
         self.path = path
+
     pass
+
 
 class FileEmptyError(Exception):
     pass
 
+
 class DataMissingError(Exception):
     pass
+
 
 class MultipleSourcesError(Exception):
     pass
 
+
 class IdNotUniqueError(Exception):
     pass
+
 
 class UnusedNodesError(Exception):
     pass
 
+
 class TooFewNodesError(Exception):
     pass
+
 
 class DataInconformationError(Exception):
     pass
 
+
 class TimeStampNotFoundError(Exception):
     pass
 
+
 # Object structures
+
 
 class PowerNode:
     def __init__(self, u_rated: float) -> None:
         self.u_rated: float = u_rated
         pass
 
+
 class PowerLine:
-    def __init__(self, from_node: int, to_node: int, from_status: int, to_status: int, r1: float, x1: float, c1: float,
-                 tan1: float, i_n: float) -> None:
+    def __init__(
+        self,
+        from_node: int,
+        to_node: int,
+        from_status: int,
+        to_status: int,
+        r1: float,
+        x1: float,
+        c1: float,
+        tan1: float,
+        i_n: float,
+    ) -> None:
         self.from_node: int = from_node
         self.to_node: int = to_node
         self.from_status: int = from_status
@@ -56,6 +78,7 @@ class PowerLine:
         self.i_n: float = i_n
         pass
 
+
 class PowerLoad:
     def __init__(self, node: int, status: int, type: int, p_specified: float, q_specified: float) -> None:
         self.node: int = node
@@ -65,6 +88,7 @@ class PowerLoad:
         self.q_specified: float = q_specified
         pass
 
+
 class PowerSource:
     def __init__(self, node: int, status: int, u_ref: float, sk: float) -> None:
         self.node: int = node
@@ -73,10 +97,12 @@ class PowerSource:
         self.sk: float = sk
         pass
 
+
 class PowerProfilePerTimestamp:
     def __init__(self, node_power: dict[int, float]) -> None:
         self.node_power: dict[int, float] = node_power
         pass
+
 
 # Main class for parsing and storing power grid model data
 class PowerGridModelData:
@@ -96,7 +122,7 @@ class PowerGridModelData:
 
         self.load_model()
 
-    #instance method
+    # instance method
     def load_model(self) -> None:
         # Check if files exists
         PowerGridModelData._does_file_exist(self.network_path)
@@ -104,22 +130,22 @@ class PowerGridModelData:
         PowerGridModelData._does_file_exist(self.q_profile_path)
 
         # Parse network
-        with open(self.network_path, encoding='utf-8') as file:
+        with open(self.network_path, encoding="utf-8") as file:
             network_data = load(file).get("data", {})
 
         # Check if file contains data
         PowerGridModelData._CheckFileContainsData(network_data)
 
         # Parse data into structured objects
-        self.nodes: dict[int, PowerNode] = PowerGridModelData._ParseNodes(network_data) # Parse nodes
-        self.lines: dict[int, PowerLine] = PowerGridModelData._ParseLines(network_data) # Parse lines
-        self.load: dict[int, PowerLoad] = PowerGridModelData._ParseLoads(network_data) # Parse loads
-        self.source: dict[int, PowerSource] = PowerGridModelData._ParseSource(network_data) # Parse source
+        self.nodes: dict[int, PowerNode] = PowerGridModelData._ParseNodes(network_data)  # Parse nodes
+        self.lines: dict[int, PowerLine] = PowerGridModelData._ParseLines(network_data)  # Parse lines
+        self.load: dict[int, PowerLoad] = PowerGridModelData._ParseLoads(network_data)  # Parse loads
+        self.source: dict[int, PowerSource] = PowerGridModelData._ParseSource(network_data)  # Parse source
 
         # Check for data consistency and integrity
-        PowerGridModelData._CheckSingleSource(self.source) # Check for single source
-        PowerGridModelData._CheckUniqueIds(self.nodes, self.lines, self.load, self.source) # Check for unique IDs
-        PowerGridModelData._CheckNodeUsage(self.nodes, self.source, self.load) # Check node usage
+        PowerGridModelData._CheckSingleSource(self.source)  # Check for single source
+        PowerGridModelData._CheckUniqueIds(self.nodes, self.lines, self.load, self.source)  # Check for unique IDs
+        PowerGridModelData._CheckNodeUsage(self.nodes, self.source, self.load)  # Check node usage
 
         load_ids: list[int] = PowerGridModelData._ListLoadIds(self.load)
 
@@ -204,7 +230,7 @@ class PowerGridModelData:
         return not bool(data)
 
     @staticmethod
-    def  _CheckFileContainsData(data: dict) -> None:
+    def _CheckFileContainsData(data: dict) -> None:
         if PowerGridModelData._IsDictEmpty(data):
             raise FileEmptyError("File does not contain data.")
         return True
@@ -212,13 +238,13 @@ class PowerGridModelData:
     @staticmethod
     def _CheckSectionContainsData(section_data: list, section: str) -> None:
         if PowerGridModelData._IsDictEmpty(section_data):
-            raise DataMissingError(f"Section \"{section}\" does not contain data.")
+            raise DataMissingError(f'Section "{section}" does not contain data.')
         return True
 
     @staticmethod
     def _ParseNodes(network_data: dict) -> dict[int, PowerNode]:
         # Load and check section data
-        entries = network_data.get("node",[])
+        entries = network_data.get("node", [])
         PowerGridModelData._CheckSectionContainsData(entries, "node")
 
         # Prepare structured data
@@ -237,7 +263,7 @@ class PowerGridModelData:
     @staticmethod
     def _ParseLines(network_data: dict) -> dict[int, PowerLine]:
         # Load and check section data
-        entries = network_data.get("line",[])
+        entries = network_data.get("line", [])
         PowerGridModelData._CheckSectionContainsData(entries, "line")
 
         # Prepare structured data
@@ -258,14 +284,23 @@ class PowerGridModelData:
             i_n = float(entry["i_n"])
 
             # Create PowerLine object and add to lines dictionary
-            lines[id] = PowerLine(from_node=from_node, to_node=to_node, from_status=from_status, to_status=to_status,
-                                  r1=r1, x1=x1, c1=c1, tan1=tan1, i_n=i_n)
+            lines[id] = PowerLine(
+                from_node=from_node,
+                to_node=to_node,
+                from_status=from_status,
+                to_status=to_status,
+                r1=r1,
+                x1=x1,
+                c1=c1,
+                tan1=tan1,
+                i_n=i_n,
+            )
         return lines
 
     @staticmethod
     def _ParseLoads(network_data: dict) -> dict[int, PowerLoad]:
         # Load and check section data
-        entries = network_data.get("load",[])
+        entries = network_data.get("load", [])
         PowerGridModelData._CheckSectionContainsData(entries, "sym_load")
 
         # Prepare structured data
@@ -288,7 +323,7 @@ class PowerGridModelData:
     @staticmethod
     def _ParseSource(network_data: dict) -> dict[int, PowerSource]:
         # Load and check section data
-        entries = network_data.get("source",[])
+        entries = network_data.get("source", [])
         PowerGridModelData._CheckSectionContainsData(entries, "source")
 
         sources: dict[int, PowerSource] = {}
@@ -312,28 +347,42 @@ class PowerGridModelData:
         return True
 
     @staticmethod
-    def _CheckUniqueIds(nodes: dict[int, PowerNode], lines: dict[int, PowerLine], loads: dict[int, PowerLoad],
-                        sources: dict[int, PowerSource]) -> None:
+    def _CheckUniqueIds(
+        nodes: dict[int, PowerNode],
+        lines: dict[int, PowerLine],
+        loads: dict[int, PowerLoad],
+        sources: dict[int, PowerSource],
+    ) -> None:
         all_ids = []
         all_ids.extend(nodes.keys())
         all_ids.extend(lines.keys())
         all_ids.extend(loads.keys())
         all_ids.extend(sources.keys())
         if len(all_ids) != len(set(all_ids)):
-            raise IdNotUniqueError("Duplicate IDs found across nodes, lines, loads, or sources. All IDs must be unique.")
+            raise IdNotUniqueError(
+                "Duplicate IDs found across nodes, lines, loads, or sources. All IDs must be unique."
+            )
         return
 
     @staticmethod
-    def _CheckNodeUsage(nodes: dict[int, PowerNode], sources: dict[int, PowerSource], loads: dict[int, PowerLoad]) -> None:
+    def _CheckNodeUsage(
+        nodes: dict[int, PowerNode], sources: dict[int, PowerSource], loads: dict[int, PowerLoad]
+    ) -> None:
         used_nodes = []
         used_nodes.extend(sources.keys())
         used_nodes.extend(loads.keys())
 
         available_nodes = nodes.keys()
         if len(set(used_nodes)) > len(set(available_nodes)):
-            raise TooFewNodesError("Number of loads and sources exceeds the number of available nodes. Each load and source must be connected to a single node.")
+            raise TooFewNodesError(
+                "Number of loads and sources exceeds the number of available nodes. Each load and source must be " \
+                "connected to a single node."
+            )
         if len(set(used_nodes)) < len(set(available_nodes)):
-            raise UnusedNodesError("There are nodes in the network that are not connected to any load or source. All nodes must be utilized.")
+            raise UnusedNodesError(
+                "There are nodes in the network that are not connected to any load or source. All nodes must be" \
+                " utilized."
+            )
         return
 
     @staticmethod
@@ -352,11 +401,17 @@ class PowerGridModelData:
 
         if not load_ids_set.issubset(headers_set):
             missing_ids = load_ids_set - headers_set
-            raise DataInconformationError(f"The following load IDs specified in the network data are missing from the power profile data: {missing_ids}")
+            raise DataInconformationError(
+                "The following load IDs specified in the network data are missing from the power" \
+                f" profile data: {missing_ids}"
+            )
 
         if not headers_set.issubset(load_ids_set):
             extra_headers = headers_set - load_ids_set
-            raise DataInconformationError(f"The following headers in the power profile data do not match any load IDs specified in the network data: {extra_headers}")
+            raise DataInconformationError(
+                "The following headers in the power profile data do not match any load IDs specified in" \
+                f"the network data: {extra_headers}"
+            )
         return
 
     @staticmethod
@@ -374,19 +429,25 @@ class PowerGridModelData:
         rowEntries2 = PowerGridModelData._CheckDataframeRowentries(df2)
 
         if rowEntries1 != rowEntries2:
-            raise DataInconformationError(f"The number of entries in the active power profile ({rowEntries1}) does not match the number of entries in the reactive power profile ({rowEntries2}). Both profiles must contain the same number of entries.")
+            raise DataInconformationError(
+                f"The number of entries in the active power profile ({rowEntries1}) does not match the number of" /
+                f"entries in the reactive power profile ({rowEntries2})." /
+                "Both profiles must contain the same number of entries."
+            )
         return
 
     @staticmethod
     def _GetDataframeTimestampslist(df: pd.DataFrame) -> list[str]:
-        timestamps_list = df.index.strftime('%d-%b-%Y %H:%M:%S').tolist()
+        timestamps_list = df.index.strftime("%d-%b-%Y %H:%M:%S").tolist()
         return timestamps_list
 
     @staticmethod
     def _CheckUniqueTimestamps(df: pd.DataFrame) -> None:
         timestamps = PowerGridModelData._GetDataframeTimestampslist(df)
         if len(timestamps) != len(set(timestamps)):
-            raise DataInconformationError("Duplicate timestamps found in the power profile data. All timestamps must be unique.")
+            raise DataInconformationError(
+                "Duplicate timestamps found in the power profile data. All timestamps must be unique."
+            )
         return
 
     @staticmethod
@@ -395,7 +456,10 @@ class PowerGridModelData:
         timestamps2 = PowerGridModelData._GetDataframeTimestampslist(df2)
 
         if set(timestamps1) != set(timestamps2):
-            raise DataInconformationError("The timestamps in the active power profile do not match the timestamps in the reactive power profile. Both profiles must contain the same timestamps.")
+            raise DataInconformationError(
+                "The timestamps in the active power profile do not match the timestamps in the reactive power" \
+                " profile. Both profiles must contain the same timestamps."
+            )
         return
 
     @staticmethod
@@ -407,10 +471,8 @@ class PowerGridModelData:
 
     @staticmethod
     def _GetPowerProfileForTimestamp(df: pd.DataFrame, timestamp: str) -> PowerProfilePerTimestamp:
-        row = df.loc[df.index.strftime('%d-%b-%Y %H:%M:%S') == timestamp]
+        row = df.loc[df.index.strftime("%d-%b-%Y %H:%M:%S") == timestamp]
 
         node_power: dict[int, float] = row.to_dict()
 
         return PowerProfilePerTimestamp(node_power=node_power)
-
-
