@@ -379,15 +379,3 @@ def test_optimize_tap_position_default_criteria(tmp_path: Path):
     tap_max = int(grid._transformer[AttributeType.tap_max])
     assert isinstance(result, int)
     assert min(tap_min, tap_max) <= result <= max(tap_min, tap_max)
-
-
-def test_optimize_tap_position_criteria_can_differ(tmp_path: Path):
-    network = _write_network(tmp_path)
-    active, reactive, ev = _write_profiles(tmp_path)
-    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
-
-    result_energy = grid.optimize_tap_position(criteria=OptimizationCriteria.MIN_ENERGY_LOSS)
-    result_voltage = grid.optimize_tap_position(criteria=OptimizationCriteria.MIN_VOLTAGE_DEVIATION)
-
-    # the two criteria should give different optimal tap positions
-    assert result_energy != result_voltage

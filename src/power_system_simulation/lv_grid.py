@@ -312,11 +312,12 @@ class LVGrid:
             tap_update[AttributeType.tap_pos] = [tap]
             model.update(update_data={ComponentType.transformer: tap_update})
             # Run batch power flow over the whole time series
+            time_interval_hours = (self.active_profile.index[1] - self.active_profile.index[0]).total_seconds() / 3600
             result = model.calculate_power_flow(update_data=batch_update)
             if criteria == OptimizationCriteria.MIN_ENERGY_LOSS:
                 p_from = result[ComponentType.line][AttributeType.p_from]
                 p_to = result[ComponentType.line][AttributeType.p_to]
-                scores[tap] = float(np.sum(p_from + p_to))
+                scores[tap] = float(np.sum(p_from + p_to) * time_interval_hours)
 
             elif criteria == OptimizationCriteria.MIN_VOLTAGE_DEVIATION:
                 u_pu = result[ComponentType.node][AttributeType.u_pu]
