@@ -26,10 +26,19 @@ Rules 5 and 6 reuse ``GraphProcessor`` from Assignment 1 (its constructor
 raises ``GraphNotFullyConnectedError`` / ``GraphCycleError`` if violated).
 """
 
+from enum import Enum
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
-from power_grid_model import AttributeType, CalculationType, ComponentType
+from power_grid_model import (
+    AttributeType,
+    CalculationType,
+    ComponentType,
+    DatasetType,
+    PowerGridModel,
+    initialize_array,
+)
 from power_grid_model.utils import json_deserialize
 from power_grid_model.validation import assert_valid_input_data
 
@@ -70,6 +79,11 @@ class ProfileLoadIdNotSymLoadError(Exception):
 
 class InsufficientEvProfilesError(Exception):
     """There are fewer EV profiles than sym_loads in the network."""
+
+
+class OptimizationCriteria(Enum):
+    MIN_ENERGY_LOSS = "min_energy_loss"
+    MIN_VOLTAGE_DEVIATION = "min_voltage_deviation"
 
 
 # ---------------------------------------------------------------------------
@@ -269,3 +283,45 @@ class LVGrid:
     def transformer_lv_node(self) -> int:
         """The LV-side node of the transformer (where the feeders start)."""
         return int(self._transformer[AttributeType.to_node])
+
+    # ------------------------------------------------------------------ #
+    # Finding the optimal tap position                                   #
+    # ------------------------------------------------------------------ #
+    def optimize_tap_position(self, criteria: OptimizationCriteria = OptimizationCriteria.MIN_VOLTAGE_DEVIATION) -> int:
+        # Get the tap range from the transformer attributes
+        tap_min = int(self._transformer[AttributeType.tap_min])
+        tap_max = int(self._transformer[AttributeType.tap_max])
+        # swap if wrong order
+        tap_lower = min(tap_min, tap_max)  # 1
+        tap_upper = max(tap_min, tap_max)  # 5
+        # Build load update data for the time series
+        n_timesteps = len(self.active_profile)
+        n_loads = len(self.sym_load_ids)
+        load_update = initialize_array(DatasetType.update, ComponentType.sym_load, (n_timesteps, n_loads))
+        load_update[AttributeType.id] = np.tile(self.sym_load_ids, (n_timesteps, 1))
+        load_update[AttributeType.p_specified] = self.active_profile.values
+        load_update[AttributeType.q_specified] = self.reactive_profile.values
+        batch_update = {ComponentType.sym_load: load_update}
+        model = PowerGridModel(self.input_data)
+        scores = {}
+
+        for tap in range(tap_lower, tap_upper + 1):
+            # Update the tap position in input_data directly
+            tap_update = initialize_array(DatasetType.update, ComponentType.transformer, 1)
+            tap_update[AttributeType.id] = [self.transformer_id]
+            tap_update[AttributeType.tap_pos] = [tap]
+            model.update(update_data={ComponentType.transformer: tap_update})
+            # Run batch power flow over the whole time series
+            time_interval_hours = (self.active_profile.index[1] - self.active_profile.index[0]).total_seconds() / 3600
+            result = model.calculate_power_flow(update_data=batch_update)
+            if criteria == OptimizationCriteria.MIN_ENERGY_LOSS:
+                p_from = result[ComponentType.line][AttributeType.p_from]
+                p_to = result[ComponentType.line][AttributeType.p_to]
+                scores[tap] = float(np.sum(p_from + p_to) * time_interval_hours)
+
+            elif criteria == OptimizationCriteria.MIN_VOLTAGE_DEVIATION:
+                u_pu = result[ComponentType.node][AttributeType.u_pu]
+                max_dev = np.abs(np.max(u_pu, axis=0) - 1.0)
+                min_dev = np.abs(np.min(u_pu, axis=0) - 1.0)
+                scores[tap] = float(np.mean((max_dev + min_dev) / 2))
+        return min(scores, key=scores.get)

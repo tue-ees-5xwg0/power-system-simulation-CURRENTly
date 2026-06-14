@@ -16,15 +16,13 @@ from power_grid_model import (
 )
 from power_grid_model.utils import json_serialize
 
-from power_system_simulation.graph_processing import (
-    GraphCycleError,
-    GraphNotFullyConnectedError,
-)
+from power_system_simulation.graph_processing import GraphCycleError, GraphNotFullyConnectedError
 from power_system_simulation.lv_grid import (
     FeederIdNotALineError,
     FeederNotAtTransformerError,
     InsufficientEvProfilesError,
     LVGrid,
+    OptimizationCriteria,
     ProfileLoadIdMismatchError,
     ProfileLoadIdNotSymLoadError,
     ProfileTimestampMismatchError,
@@ -338,3 +336,46 @@ def test_more_ev_profiles_than_loads_ok(tmp_path: Path):
     active, reactive, ev = _write_profiles(tmp_path, n_ev_profiles=5)
     grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
     assert grid.ev_profile.shape[1] == 5
+
+
+# ---------------------------------------------------------------------------
+# Check: optimize_tap_position runs and returns a tap within the allowed range
+# ---------------------------------------------------------------------------
+def test_optimize_tap_position_energy_loss(tmp_path: Path):
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    result = grid.optimize_tap_position(criteria=OptimizationCriteria.MIN_ENERGY_LOSS)
+
+    tap_min = int(grid._transformer[AttributeType.tap_min])
+    tap_max = int(grid._transformer[AttributeType.tap_max])
+    assert isinstance(result, int)
+    assert min(tap_min, tap_max) <= result <= max(tap_min, tap_max)
+
+
+def test_optimize_tap_position_voltage_deviation(tmp_path: Path):
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    result = grid.optimize_tap_position(criteria=OptimizationCriteria.MIN_VOLTAGE_DEVIATION)
+
+    tap_min = int(grid._transformer[AttributeType.tap_min])
+    tap_max = int(grid._transformer[AttributeType.tap_max])
+    assert isinstance(result, int)
+    assert min(tap_min, tap_max) <= result <= max(tap_min, tap_max)
+
+
+def test_optimize_tap_position_default_criteria(tmp_path: Path):
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    # should work without passing criteria (uses default)
+    result = grid.optimize_tap_position()
+
+    tap_min = int(grid._transformer[AttributeType.tap_min])
+    tap_max = int(grid._transformer[AttributeType.tap_max])
+    assert isinstance(result, int)
+    assert min(tap_min, tap_max) <= result <= max(tap_min, tap_max)
