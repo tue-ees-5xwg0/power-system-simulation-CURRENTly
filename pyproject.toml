@@ -20,8 +20,12 @@ classifiers = [
 requires-python = ">=3.14"
 # add dependencies of your core package, check the license first!
 dependencies = [
+    "matplotlib>=3.11.0",
     "networkx>=3.6.1",
     "numpy>=2.4.4",
+    "pandas>=3.0.3",
+    "power-grid-model>=1.13.87",
+    "pyarrow>=24.0.0",
     "scipy>=1.17.1",
 ]
 version = "0.1"
