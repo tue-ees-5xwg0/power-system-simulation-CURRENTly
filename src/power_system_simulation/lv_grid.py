@@ -80,6 +80,13 @@ class ProfileLoadIdNotSymLoadError(Exception):
 class InsufficientEvProfilesError(Exception):
     """There are fewer EV profiles than sym_loads in the network."""
 
+class InvalidLineIdError(Exception):
+    """The provided line ID is not a valid line in the network."""
+
+
+class LineNotConnectedError(Exception):
+    """The designated line is not connected at both sides in the base case."""
+
 
 class OptimizationCriteria(Enum):
     MIN_ENERGY_LOSS = "min_energy_loss"
@@ -520,3 +527,132 @@ class LVGrid:
                 min_dev = np.abs(np.min(u_pu, axis=0) - 1.0)
                 scores[tap] = float(np.mean((max_dev + min_dev) / 2))
         return min(scores, key=scores.get)
+
+# ------------------------------------------------------------------ #
+    # N-1 calculation                                                    #
+    # ------------------------------------------------------------------ #
+    def calculate_n_minus_1(self, line_id: int) -> pd.DataFrame:
+        """Evaluates alternative topologies when a given line is out of service.
+
+        Parameters
+        ----------
+        line_id : int
+            The ID of the line that is taken out of service.
+
+        Returns
+        -------
+        pd.DataFrame
+            A summary table of alternative scenarios and their maximum line loadings.
+        """
+        # ---- 1. Validate Input Data ----
+        lines = self.input_data[ComponentType.line]
+        if line_id not in self.line_ids:
+            raise InvalidLineIdError(f"Line ID {line_id} is not valid.")
+
+        # Find index of the line to check base status
+        line_idx = np.where(lines[AttributeType.id] == line_id)[0][0]
+        from_status = lines[AttributeType.from_status][line_idx]
+        to_status = lines[AttributeType.to_status][line_idx]
+
+        if not (from_status == 1 and to_status == 1):
+            raise LineNotConnectedError(f"Line {line_id} is not fully connected in the base case.")
+
+        # ---- 2. Find valid alternative lines ----
+        # Base graph structure arrays
+        edge_ids = [int(x) for x in lines[AttributeType.id]]
+        edge_vertex_id_pairs = [
+            (int(lines[AttributeType.from_node][i]), int(lines[AttributeType.to_node][i]))
+            for i in range(len(lines))
+        ]
+        vertex_ids = sorted({v for pair in edge_vertex_id_pairs for v in pair})
+
+        disconnected_line_ids = [
+            int(lines[AttributeType.id][i]) for i in range(len(lines))
+            if (lines[AttributeType.from_status][i] == 0 or lines[AttributeType.to_status][i] == 0)
+            and lines[AttributeType.id][i] != line_id
+        ]
+
+        valid_alternatives = []
+        for alt_id in disconnected_line_ids:
+            # Build an edge_enabled list for this specific scenario
+            edge_enabled = []
+            for i, eid in enumerate(edge_ids):
+                if eid == line_id:
+                    edge_enabled.append(False)  # Disconnect the failed line
+                elif eid == alt_id:
+                    edge_enabled.append(True)   # Connect the alternative line
+                else:
+                    # Keep base status for all other lines
+                    edge_enabled.append(bool(lines[AttributeType.from_status][i])
+                                        and bool(lines[AttributeType.to_status][i]))
+
+            try:
+                # Reuse GraphProcessor: It raises an error if the graph is not fully connected or has cycles
+                GraphProcessor(
+                    vertex_ids=vertex_ids,
+                    edge_ids=edge_ids,
+                    vertex_edge_id_pairs=edge_vertex_id_pairs,
+                    edge_enabled=edge_enabled,
+                    source_vertex_id=self.transformer_lv_node,
+                )
+                valid_alternatives.append(alt_id)
+            except Exception:
+                # Catching Graph errors (NotFullyConnected or CycleError)
+                continue
+
+        # ---- 3. Run Time-Series Power Flow for valid alternatives ----
+        n_timesteps = len(self.active_profile)
+        n_loads = len(self.sym_load_ids)
+
+        # Prepare batch update for the time-series loads
+        load_update = initialize_array(DatasetType.update, ComponentType.sym_load, (n_timesteps, n_loads))
+        load_update[AttributeType.id] = np.tile(self.sym_load_ids, (n_timesteps, 1))
+        load_update[AttributeType.p_specified] = self.active_profile.values
+        load_update[AttributeType.q_specified] = self.reactive_profile.values
+        batch_update = {ComponentType.sym_load: load_update}
+
+        timestamps = self.active_profile.index
+        results = []
+
+        for alt_id in valid_alternatives:
+            # Instantiate a fresh model to prevent contamination between loops
+            model = PowerGridModel(self.input_data)
+
+            # Static topology update: Disconnect line_id, Connect alt_id
+            line_update = initialize_array(DatasetType.update, ComponentType.line, 2)
+            line_update[AttributeType.id] = [line_id, alt_id]
+            line_update[AttributeType.from_status] = [0, 1]
+            line_update[AttributeType.to_status] = [0, 1]
+
+            # Apply the topology update to the base model
+            model.update(update_data={ComponentType.line: line_update})
+
+            # Calculate batch power flow
+            pf_result = model.calculate_power_flow(update_data=batch_update)
+
+            # Extract line loading data. Shape: (n_timesteps, n_lines)
+            loading_data = pf_result[ComponentType.line][AttributeType.loading]
+
+            # Find the index coordinates of the absolute maximum loading
+            max_loading = np.max(loading_data)
+            time_idx, l_idx = np.unravel_index(np.argmax(loading_data), loading_data.shape)
+
+            max_line_id = lines[AttributeType.id][l_idx]
+            max_timestamp = timestamps[time_idx]
+
+            results.append({
+                "Alternative Line ID": alt_id,
+                "Maximum Loading": max_loading,
+                "Line ID of Maximum Loading": max_line_id,
+                "Timestamp of Maximum Loading": max_timestamp
+            })
+
+        # ---- 4. Return results as DataFrame ----
+        # If no alternatives were found, this naturally creates an empty table with the correct columns
+        columns = [
+            "Alternative Line ID",
+            "Maximum Loading",
+            "Line ID of Maximum Loading",
+            "Timestamp of Maximum Loading"
+        ]
+        return pd.DataFrame(results, columns=columns)
