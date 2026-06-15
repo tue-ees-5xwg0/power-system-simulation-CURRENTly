@@ -382,6 +382,11 @@ def test_optimize_tap_position_default_criteria(tmp_path: Path):
     voltage_table, line_table = grid.simulate_ev_penetration(penetration_level=1.0, seed=42)
 
 
+# ---------------------------------------------------------------------------
+# EV penetration tests
+# ---------------------------------------------------------------------------
+
+
 def test_ev_penetration_runs(tmp_path: Path):
     """Happy path: at 100% penetration, 2 sym_loads on 2 feeders -> 1 EV each."""
     network = _write_network(tmp_path)
@@ -475,3 +480,95 @@ def test_ev_penetration_too_high_raises(tmp_path: Path):
     # 200 -> 2.0 -> still > 1 -> raise
     with pytest.raises(ValueError, match="between 0 and 1"):
         grid.simulate_ev_penetration(penetration_level=200)
+
+
+# ---------------------------------------------------------------------------
+# N-1 Calculation Tests
+# ---------------------------------------------------------------------------
+
+
+def test_n_minus_1_invalid_line_raises(tmp_path: Path):
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    with pytest.raises(InvalidLineIdError):
+        grid.calculate_n_minus_1(line_id=999)
+
+
+def test_n_minus_1_disconnected_line_raises(tmp_path: Path):
+    # Add a disconnected line to the grid to test the base status check
+    data = _build_input()
+    new_line = initialize_array(DatasetType.input, ComponentType.line, 3)
+    new_line[AttributeType.id] = [2, 3, 99]
+    new_line[AttributeType.from_node] = [1, 1, 4]
+    new_line[AttributeType.to_node] = [4, 5, 5]
+    new_line[AttributeType.from_status] = [1, 1, 0]  # Line 99 is disconnected
+    new_line[AttributeType.to_status] = [1, 1, 0]
+    new_line[AttributeType.r1] = [0.1, 0.1, 0.1]
+    new_line[AttributeType.x1] = [0.05, 0.05, 0.05]
+    new_line[AttributeType.c1] = [1e-6, 1e-6, 1e-6]
+    new_line[AttributeType.tan1] = [0.0, 0.0, 0.0]
+    new_line[AttributeType.i_n] = [500.0, 500.0, 500.0]
+    data[ComponentType.line] = new_line
+
+    network = _write_network(tmp_path, data)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    # Trying to perform N-1 on a line that is already disconnected should fail
+    with pytest.raises(LineNotConnectedError):
+        grid.calculate_n_minus_1(line_id=99)
+
+
+def test_n_minus_1_no_alternatives(tmp_path: Path):
+    # Base network has no disconnected lines. Taking out line 2 breaks the grid entirely.
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    result_df = grid.calculate_n_minus_1(line_id=2)
+
+    # It should gracefully return an empty DataFrame with the required columns
+    assert isinstance(result_df, pd.DataFrame)
+    assert len(result_df) == 0
+    assert list(result_df.columns) == [
+        "Alternative Line ID",
+        "Maximum Loading",
+        "Line ID of Maximum Loading",
+        "Timestamp of Maximum Loading",
+    ]
+
+
+def test_n_minus_1_with_alternatives(tmp_path: Path):
+    # Add a disconnected tie-line (99) that can act as an alternative if line 2 fails.
+    data = _build_input()
+    new_line = initialize_array(DatasetType.input, ComponentType.line, 3)
+    new_line[AttributeType.id] = [2, 3, 99]
+    new_line[AttributeType.from_node] = [1, 1, 4]
+    new_line[AttributeType.to_node] = [4, 5, 5]
+    new_line[AttributeType.from_status] = [1, 1, 0]  # Base state: disconnected
+    new_line[AttributeType.to_status] = [1, 1, 0]
+    new_line[AttributeType.r1] = [0.1, 0.1, 0.1]
+    new_line[AttributeType.x1] = [0.05, 0.05, 0.05]
+    new_line[AttributeType.c1] = [1e-6, 1e-6, 1e-6]
+    new_line[AttributeType.tan1] = [0.0, 0.0, 0.0]
+    new_line[AttributeType.i_n] = [500.0, 500.0, 500.0]
+    data[ComponentType.line] = new_line
+
+    network = _write_network(tmp_path, data)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    # Take out line 2. The algorithm should find line 99 as a valid alternative.
+    result_df = grid.calculate_n_minus_1(line_id=2)
+
+    assert isinstance(result_df, pd.DataFrame)
+    assert len(result_df) == 1
+    assert result_df["Alternative Line ID"].iloc[0] == 99
+
+    # Check that it extracted the loading values properly
+    assert "Maximum Loading" in result_df.columns
+    assert result_df["Maximum Loading"].iloc[0] > 0
+    assert result_df["Line ID of Maximum Loading"].iloc[0] in [3, 99]  # Line 2 is disconnected
+    assert isinstance(result_df["Timestamp of Maximum Loading"].iloc[0], pd.Timestamp)

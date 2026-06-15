@@ -80,6 +80,7 @@ class ProfileLoadIdNotSymLoadError(Exception):
 class InsufficientEvProfilesError(Exception):
     """There are fewer EV profiles than sym_loads in the network."""
 
+
 class InvalidLineIdError(Exception):
     """The provided line ID is not a valid line in the network."""
 
@@ -528,7 +529,7 @@ class LVGrid:
                 scores[tap] = float(np.mean((max_dev + min_dev) / 2))
         return min(scores, key=scores.get)
 
-# ------------------------------------------------------------------ #
+    # ------------------------------------------------------------------ #
     # N-1 calculation                                                    #
     # ------------------------------------------------------------------ #
     def calculate_n_minus_1(self, line_id: int) -> pd.DataFrame:
@@ -561,13 +562,13 @@ class LVGrid:
         # Base graph structure arrays
         edge_ids = [int(x) for x in lines[AttributeType.id]]
         edge_vertex_id_pairs = [
-            (int(lines[AttributeType.from_node][i]), int(lines[AttributeType.to_node][i]))
-            for i in range(len(lines))
+            (int(lines[AttributeType.from_node][i]), int(lines[AttributeType.to_node][i])) for i in range(len(lines))
         ]
         vertex_ids = sorted({v for pair in edge_vertex_id_pairs for v in pair})
 
         disconnected_line_ids = [
-            int(lines[AttributeType.id][i]) for i in range(len(lines))
+            int(lines[AttributeType.id][i])
+            for i in range(len(lines))
             if (lines[AttributeType.from_status][i] == 0 or lines[AttributeType.to_status][i] == 0)
             and lines[AttributeType.id][i] != line_id
         ]
@@ -580,11 +581,12 @@ class LVGrid:
                 if eid == line_id:
                     edge_enabled.append(False)  # Disconnect the failed line
                 elif eid == alt_id:
-                    edge_enabled.append(True)   # Connect the alternative line
+                    edge_enabled.append(True)  # Connect the alternative line
                 else:
                     # Keep base status for all other lines
-                    edge_enabled.append(bool(lines[AttributeType.from_status][i])
-                                        and bool(lines[AttributeType.to_status][i]))
+                    edge_enabled.append(
+                        bool(lines[AttributeType.from_status][i]) and bool(lines[AttributeType.to_status][i])
+                    )
 
             try:
                 # Reuse GraphProcessor: It raises an error if the graph is not fully connected or has cycles
@@ -640,12 +642,14 @@ class LVGrid:
             max_line_id = lines[AttributeType.id][l_idx]
             max_timestamp = timestamps[time_idx]
 
-            results.append({
-                "Alternative Line ID": alt_id,
-                "Maximum Loading": max_loading,
-                "Line ID of Maximum Loading": max_line_id,
-                "Timestamp of Maximum Loading": max_timestamp
-            })
+            results.append(
+                {
+                    "Alternative Line ID": alt_id,
+                    "Maximum Loading": max_loading,
+                    "Line ID of Maximum Loading": max_line_id,
+                    "Timestamp of Maximum Loading": max_timestamp,
+                }
+            )
 
         # ---- 4. Return results as DataFrame ----
         # If no alternatives were found, this naturally creates an empty table with the correct columns
@@ -653,6 +657,6 @@ class LVGrid:
             "Alternative Line ID",
             "Maximum Loading",
             "Line ID of Maximum Loading",
-            "Timestamp of Maximum Loading"
+            "Timestamp of Maximum Loading",
         ]
         return pd.DataFrame(results, columns=columns)
