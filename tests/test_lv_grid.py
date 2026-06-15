@@ -21,6 +21,8 @@ from power_system_simulation.lv_grid import (
     FeederIdNotALineError,
     FeederNotAtTransformerError,
     InsufficientEvProfilesError,
+    InvalidLineIdError,
+    LineNotConnectedError,
     LVGrid,
     OptimizationCriteria,
     ProfileLoadIdMismatchError,
@@ -379,7 +381,6 @@ def test_optimize_tap_position_default_criteria(tmp_path: Path):
     tap_max = int(grid._transformer[AttributeType.tap_max])
     assert isinstance(result, int)
     assert min(tap_min, tap_max) <= result <= max(tap_min, tap_max)
-    voltage_table, line_table = grid.simulate_ev_penetration(penetration_level=1.0, seed=42)
 
 
 # ---------------------------------------------------------------------------
