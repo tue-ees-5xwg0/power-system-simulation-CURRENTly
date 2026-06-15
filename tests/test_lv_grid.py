@@ -379,3 +379,99 @@ def test_optimize_tap_position_default_criteria(tmp_path: Path):
     tap_max = int(grid._transformer[AttributeType.tap_max])
     assert isinstance(result, int)
     assert min(tap_min, tap_max) <= result <= max(tap_min, tap_max)
+    voltage_table, line_table = grid.simulate_ev_penetration(penetration_level=1.0, seed=42)
+
+
+def test_ev_penetration_runs(tmp_path: Path):
+    """Happy path: at 100% penetration, 2 sym_loads on 2 feeders -> 1 EV each."""
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    voltage_table, line_table = grid.simulate_ev_penetration(penetration_level=1.0, seed=42)
+
+    # 4 timestamps in the test profiles
+    assert len(voltage_table) == 4
+    assert "max_voltage_pu" in voltage_table.columns
+    assert "min_voltage_pu" in voltage_table.columns
+    assert (voltage_table["max_voltage_pu"] >= voltage_table["min_voltage_pu"]).all()
+
+    # 2 lines in the test grid
+    assert len(line_table) == 2
+    assert "energy_loss_kwh" in line_table.columns
+    assert "max_loading" in line_table.columns
+    assert (line_table["energy_loss_kwh"] >= 0).all()
+
+
+def test_ev_penetration_accepts_percentage(tmp_path: Path):
+    """A value > 1 should be interpreted as a percentage."""
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    voltage_table_pct, _ = grid.simulate_ev_penetration(penetration_level=100, seed=7)
+    voltage_table_frac, _ = grid.simulate_ev_penetration(penetration_level=1.0, seed=7)
+
+    # 100% and 1.0 are equivalent, same seed -> identical results
+    assert (voltage_table_pct["max_voltage_pu"] == voltage_table_frac["max_voltage_pu"]).all()
+
+
+def test_ev_penetration_reproducible_with_seed(tmp_path: Path):
+    """Same seed -> identical voltage tables."""
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    voltage_a, _ = grid.simulate_ev_penetration(penetration_level=1.0, seed=123)
+    voltage_b, _ = grid.simulate_ev_penetration(penetration_level=1.0, seed=123)
+
+    assert (voltage_a["max_voltage_pu"] == voltage_b["max_voltage_pu"]).all()
+    assert (voltage_a["min_voltage_pu"] == voltage_b["min_voltage_pu"]).all()
+
+
+def test_ev_penetration_return_assignment(tmp_path: Path):
+    """When return_assignment=True, a third table is returned."""
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    result = grid.simulate_ev_penetration(penetration_level=1.0, seed=1, return_assignment=True)
+
+    assert len(result) == 3
+    _, _, assignment_table = result
+    # 100% on 2 feeders with 2 houses -> 2 EVs assigned
+    assert len(assignment_table) == 2
+    assert "feeder_id" in assignment_table.columns
+    assert "sym_load_id" in assignment_table.columns
+    assert "ev_profile" in assignment_table.columns
+
+
+def test_ev_penetration_zero_level_ok(tmp_path: Path):
+    """Zero penetration: no EVs assigned, but should still run."""
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    voltage_table, line_table = grid.simulate_ev_penetration(penetration_level=0.0, seed=0)
+    assert len(voltage_table) == 4
+    assert len(line_table) == 2
+
+
+def test_ev_penetration_negative_raises(tmp_path: Path):
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    with pytest.raises(ValueError, match="cannot be negative"):
+        grid.simulate_ev_penetration(penetration_level=-0.1)
+
+
+def test_ev_penetration_too_high_raises(tmp_path: Path):
+    """A value above 100% (after fraction conversion) should raise."""
+    network = _write_network(tmp_path)
+    active, reactive, ev = _write_profiles(tmp_path)
+    grid = LVGrid(network, active, reactive, ev, feeder_ids=[2, 3])
+
+    # 200 -> 2.0 -> still > 1 -> raise
+    with pytest.raises(ValueError, match="between 0 and 1"):
+        grid.simulate_ev_penetration(penetration_level=200)

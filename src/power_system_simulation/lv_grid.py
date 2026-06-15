@@ -284,210 +284,200 @@ class LVGrid:
         """The LV-side node of the transformer (where the feeders start)."""
         return int(self._transformer[AttributeType.to_node])
 
-
     # ------------------------------------------------------------------- #
     # Finding the EV penetration level                                    #
     # ------------------------------------------------------------------- #
 
     def simulate_ev_penetration(
-    self,
-    penetration_level: float,
-    seed: int | None = None,
-    return_assignment: bool = False,
-):
-    """Add random EV charging profiles to houses and run time-series power flow.
+        self,
+        penetration_level: float,
+        seed: int | None = None,
+        return_assignment: bool = False,
+    ):
+        """Add random EV charging profiles to houses and run time-series power flow.
 
-    Parameters
-    ----------
-    penetration_level:
-        EV penetration level. Accepts 0.2 or 20 for 20%.
-    seed:
-        Random seed, so the random assignment can be repeated.
-    return_assignment:
-        If True, also return a table showing which EV profile was assigned
-        to which sym_load.
+        Parameters
+        ----------
+        penetration_level:
+            EV penetration level. Accepts 0.2 or 20 for 20%.
+        seed:
+            Random seed, so the random assignment can be repeated.
+        return_assignment:
+            If True, also return a table showing which EV profile was assigned
+            to which sym_load.
 
-    Returns
-    -------
-    voltage_table, line_table
-        The two aggregation tables required by the assignment.
-    """
+        Returns
+        -------
+        voltage_table, line_table
+            The two aggregation tables required by the assignment.
+        """
 
-    # Accept both 0.2 and 20 as 20%
-    if penetration_level < 0:
-        raise ValueError("Penetration level cannot be negative.")
-    if penetration_level > 1:
-        penetration_level = penetration_level / 100
-    if penetration_level > 1:
-        raise ValueError("Penetration level must be between 0 and 1, or 0 and 100%.")
+        # Accept both 0.2 and 20 as 20%
+        if penetration_level < 0:
+            raise ValueError("Penetration level cannot be negative.")
+        if penetration_level > 1:
+            penetration_level = penetration_level / 100
+        if penetration_level > 1:
+            raise ValueError("Penetration level must be between 0 and 1, or 0 and 100%.")
 
-    rng = np.random.default_rng(seed)
+        rng = np.random.default_rng(seed)
 
-    # Copy the original active profile, then add EV loads to this copy
-    active_with_ev = self.active_profile.copy()
+        # Copy the original active profile, then add EV loads to this copy
+        active_with_ev = self.active_profile.copy()
 
-    total_houses = len(active_with_ev.columns)
-    number_of_feeders = len(self.feeder_ids)
+        total_houses = len(active_with_ev.columns)
+        number_of_feeders = len(self.feeder_ids)
 
-    evs_per_feeder = int(
-        np.floor(penetration_level * total_houses / number_of_feeders)
-    )
+        evs_per_feeder = int(np.floor(penetration_level * total_houses / number_of_feeders))
 
-    total_evs_needed = evs_per_feeder * number_of_feeders
+        total_evs_needed = evs_per_feeder * number_of_feeders
 
-    if total_evs_needed > self.ev_profile.shape[1]:
-        raise ValueError(
-            f"{total_evs_needed} EV profiles are needed, "
-            f"but only {self.ev_profile.shape[1]} are available."
-        )
-
-    # Map sym_load ID -> node ID
-    sym_loads = self.input_data[ComponentType.sym_load]
-    load_node_by_id = {
-        int(sym_loads[AttributeType.id][i]): int(sym_loads[AttributeType.node][i])
-        for i in range(len(sym_loads))
-    }
-
-    # Map load ID -> profile column name
-    # This is useful because parquet columns can sometimes be strings.
-    active_column_by_load_id = {
-        int(column): column for column in active_with_ev.columns
-    }
-
-    # Randomly choose EV profiles, without using the same EV profile twice
-    ev_profile_columns = np.array(self.ev_profile.columns, dtype=object)
-    chosen_ev_profiles = rng.choice(
-        ev_profile_columns,
-        size=total_evs_needed,
-        replace=False,
-    )
-
-    assignments = []
-    ev_profile_index = 0
-
-    # Select houses per feeder
-    for feeder_id in self.feeder_ids:
-        downstream_nodes = set(
-            self.graph.find_downstream_vertices(int(feeder_id))
-        )
-
-        feeder_load_ids = [
-            load_id
-            for load_id, node_id in load_node_by_id.items()
-            if node_id in downstream_nodes
-            and load_id in active_column_by_load_id
-        ]
-
-        if len(feeder_load_ids) < evs_per_feeder:
+        if total_evs_needed > self.ev_profile.shape[1]:
             raise ValueError(
-                f"Feeder {feeder_id} has only {len(feeder_load_ids)} houses, "
-                f"but {evs_per_feeder} EVs are required."
+                f"{total_evs_needed} EV profiles are needed, but only {self.ev_profile.shape[1]} are available."
             )
 
-        selected_load_ids = rng.choice(
-            np.array(feeder_load_ids, dtype=int),
-            size=evs_per_feeder,
-            replace=False,
+        # Map sym_load ID -> node ID
+        sym_loads = self.input_data[ComponentType.sym_load]
+        load_node_by_id = {
+            int(sym_loads[AttributeType.id][i]): int(sym_loads[AttributeType.node][i]) for i in range(len(sym_loads))
+        }
+
+        # Map load ID -> profile column name
+        # This is useful because parquet columns can sometimes be strings.
+        active_column_by_load_id = {int(column): column for column in active_with_ev.columns}
+
+        # Randomly choose EV profiles, without using the same EV profile twice
+        ev_profile_columns = np.array(self.ev_profile.columns, dtype=object)
+
+        if total_evs_needed == 0:
+            chosen_ev_profiles = np.array([], dtype=object)
+        else:
+            chosen_ev_profiles = rng.choice(
+                ev_profile_columns,
+                size=total_evs_needed,
+                replace=False,
+            )
+
+        assignments: list[dict] = []
+        ev_profile_index = 0
+
+        # Select houses per feeder
+        for feeder_id in self.feeder_ids:
+            downstream_nodes = set(self.graph.find_downstream_vertices(int(feeder_id)))
+
+            feeder_load_ids = [
+                load_id
+                for load_id, node_id in load_node_by_id.items()
+                if node_id in downstream_nodes and load_id in active_column_by_load_id
+            ]
+
+            if len(feeder_load_ids) < evs_per_feeder:
+                raise ValueError(
+                    f"Feeder {feeder_id} has only {len(feeder_load_ids)} houses, but {evs_per_feeder} EVs are required."
+                )
+
+            if evs_per_feeder == 0:
+                continue
+
+            selected_load_ids = rng.choice(
+                np.array(feeder_load_ids, dtype=int),
+                size=evs_per_feeder,
+                replace=False,
+            )
+
+            for load_id in selected_load_ids:
+                ev_profile_column = chosen_ev_profiles[ev_profile_index]
+                ev_profile_index += 1
+
+                active_column = active_column_by_load_id[int(load_id)]
+
+                # Add EV active power profile to the house active load
+                active_with_ev[active_column] = active_with_ev[active_column] + self.ev_profile[ev_profile_column]
+
+                assignments.append(
+                    {
+                        "feeder_id": int(feeder_id),
+                        "sym_load_id": int(load_id),
+                        "ev_profile": ev_profile_column,
+                    }
+                )
+
+        assignment_table = pd.DataFrame(assignments)
+
+        # Build time-series load update, same idea as optimize_tap_position()
+        n_timesteps = len(active_with_ev)
+        load_ids = np.asarray(active_with_ev.columns, dtype=np.int32)
+        n_loads = len(load_ids)
+
+        load_update = initialize_array(
+            DatasetType.update,
+            ComponentType.sym_load,
+            (n_timesteps, n_loads),
         )
 
-        for load_id in selected_load_ids:
-            ev_profile_column = chosen_ev_profiles[ev_profile_index]
-            ev_profile_index += 1
+        load_update[AttributeType.id] = np.tile(load_ids, (n_timesteps, 1))
+        load_update[AttributeType.p_specified] = active_with_ev.values
+        load_update[AttributeType.q_specified] = self.reactive_profile.values
 
-            active_column = active_column_by_load_id[int(load_id)]
+        batch_update = {
+            ComponentType.sym_load: load_update,
+        }
 
-            # Add EV active power profile to the house active load
-            active_with_ev[active_column] = (
-                active_with_ev[active_column]
-                + self.ev_profile[ev_profile_column]
-            )
+        # Run time-series power flow
+        model = PowerGridModel(self.input_data)
+        result = model.calculate_power_flow(update_data=batch_update)
 
-            assignments.append(
-                {
-                    "feeder_id": int(feeder_id),
-                    "sym_load_id": int(load_id),
-                    "ev_profile": ev_profile_column,
-                }
-            )
+        # ------------------------------------------------------------------ #
+        # Voltage aggregation table                                           #
+        # ------------------------------------------------------------------ #
 
-    assignment_table = pd.DataFrame(assignments)
+        node_ids = self.input_data[ComponentType.node][AttributeType.id]
+        u_pu = result[ComponentType.node][AttributeType.u_pu]
 
-    # Build time-series load update, same idea as optimize_tap_position()
-    n_timesteps = len(active_with_ev)
-    load_ids = np.asarray(active_with_ev.columns, dtype=np.int32)
-    n_loads = len(load_ids)
+        voltage_table = pd.DataFrame(
+            {
+                "max_voltage_pu": np.max(u_pu, axis=1),
+                "max_voltage_node_id": node_ids[np.argmax(u_pu, axis=1)],
+                "min_voltage_pu": np.min(u_pu, axis=1),
+                "min_voltage_node_id": node_ids[np.argmin(u_pu, axis=1)],
+            },
+            index=active_with_ev.index,
+        )
 
-    load_update = initialize_array(
-        DatasetType.update,
-        ComponentType.sym_load,
-        (n_timesteps, n_loads),
-    )
+        # ------------------------------------------------------------------ #
+        # Line aggregation table                                              #
+        # ------------------------------------------------------------------ #
 
-    load_update[AttributeType.id] = np.tile(load_ids, (n_timesteps, 1))
-    load_update[AttributeType.p_specified] = active_with_ev.values
-    load_update[AttributeType.q_specified] = self.reactive_profile.values
+        line_ids_arr = self.input_data[ComponentType.line][AttributeType.id]
+        line_result = result[ComponentType.line]
 
-    batch_update = {
-        ComponentType.sym_load: load_update,
-    }
+        p_from = line_result[AttributeType.p_from]
+        p_to = line_result[AttributeType.p_to]
+        loading = line_result[AttributeType.loading]
 
-    # Run time-series power flow
-    model = PowerGridModel(self.input_data)
-    result = model.calculate_power_flow(update_data=batch_update)
+        line_loss_w = np.abs(p_from + p_to)
 
-    # ------------------------------------------------------------------ #
-    # Voltage aggregation table                                           #
-    # ------------------------------------------------------------------ #
+        if isinstance(active_with_ev.index, pd.DatetimeIndex) and len(active_with_ev.index) > 1:
+            dt_hours = (active_with_ev.index[1] - active_with_ev.index[0]).total_seconds() / 3600
+        else:
+            dt_hours = 1.0
 
-    node_ids = self.input_data[ComponentType.node][AttributeType.id]
-    u_pu = result[ComponentType.node][AttributeType.u_pu]
+        line_table = pd.DataFrame(
+            {
+                "energy_loss_kwh": np.sum(line_loss_w, axis=0) * dt_hours / 1000,
+                "max_loading": np.max(loading, axis=0),
+                "max_loading_timestamp": active_with_ev.index[np.argmax(loading, axis=0)],
+                "min_loading": np.min(loading, axis=0),
+                "min_loading_timestamp": active_with_ev.index[np.argmin(loading, axis=0)],
+            },
+            index=line_ids_arr,
+        )
 
-    voltage_table = pd.DataFrame(
-        {
-            "max_voltage_pu": np.max(u_pu, axis=1),
-            "max_voltage_node_id": node_ids[np.argmax(u_pu, axis=1)],
-            "min_voltage_pu": np.min(u_pu, axis=1),
-            "min_voltage_node_id": node_ids[np.argmin(u_pu, axis=1)],
-        },
-        index=active_with_ev.index,
-    )
+        if return_assignment:
+            return voltage_table, line_table, assignment_table
 
-    # ------------------------------------------------------------------ #
-    # Line aggregation table                                              #
-    # ------------------------------------------------------------------ #
-
-    line_ids = self.input_data[ComponentType.line][AttributeType.id]
-    line_result = result[ComponentType.line]
-
-    p_from = line_result[AttributeType.p_from]
-    p_to = line_result[AttributeType.p_to]
-    loading = line_result[AttributeType.loading]
-
-    line_loss_w = np.abs(p_from + p_to)
-
-    if isinstance(active_with_ev.index, pd.DatetimeIndex) and len(active_with_ev.index) > 1:
-        dt_hours = (
-            active_with_ev.index[1] - active_with_ev.index[0]
-        ).total_seconds() / 3600
-    else:
-        dt_hours = 1.0
-
-    line_table = pd.DataFrame(
-        {
-            "energy_loss_kwh": np.sum(line_loss_w, axis=0) * dt_hours / 1000,
-            "max_loading": np.max(loading, axis=0),
-            "max_loading_timestamp": active_with_ev.index[np.argmax(loading, axis=0)],
-            "min_loading": np.min(loading, axis=0),
-            "min_loading_timestamp": active_with_ev.index[np.argmin(loading, axis=0)],
-        },
-        index=line_ids,
-    )
-
-    if return_assignment:
-        return voltage_table, line_table, assignment_table
-
-    return voltage_table, line_table
-
+        return voltage_table, line_table
 
     # ------------------------------------------------------------------ #
     # Finding the optimal tap position                                   #
@@ -497,8 +487,8 @@ class LVGrid:
         tap_min = int(self._transformer[AttributeType.tap_min])
         tap_max = int(self._transformer[AttributeType.tap_max])
         # swap if wrong order
-        tap_lower = min(tap_min, tap_max)  # 1
-        tap_upper = max(tap_min, tap_max)  # 5
+        tap_lower = min(tap_min, tap_max)
+        tap_upper = max(tap_min, tap_max)
         # Build load update data for the time series
         n_timesteps = len(self.active_profile)
         n_loads = len(self.sym_load_ids)
