@@ -384,10 +384,10 @@ class GraphProcessor:
 
     @staticmethod
     def _organise_id_state(edge_ids: list[int], edge_enabled: list[bool]) -> dict[int, bool]:
-        # 1. edge_ids should be unique.
+        # edge_ids should be unique.
         GraphProcessor._check_uniqueness(edge_ids)
 
-        # 4. edge_enabled should have the same length as edge_ids.
+        # edge_enabled should have the same length as edge_ids.
         GraphProcessor._check_length_edge_enabled(edge_enabled, edge_ids)
 
         # Build dictionary
@@ -447,10 +447,10 @@ class GraphProcessor:
         graph = GraphProcessor._self_build_graph(connectivity, self.vertex_ids)
 
         ## Graph checks
-        # 6. The graph should be fully connected.
+        # The graph should be fully connected.
         GraphProcessor._check_graph_connected(GraphProcessor._nx_graph_to_scipy(graph))
 
-        # 7. The graph should not contain cycles.
+        # The graph should not contain cycles.
         GraphProcessor._check_contain_cycles(graph)
 
         # Assign created and checked graph to instance graph
