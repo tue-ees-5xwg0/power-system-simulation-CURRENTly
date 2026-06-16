@@ -222,12 +222,12 @@ def test_malformed_network_json_raises(tmp_path: Path):
         runner.load_network()
 
 
-def test_aggregate_power_flow(tmp_path: Path):
+def test_voltage_table(tmp_path: Path):
     network = _write_network(tmp_path)
     active, reactive = _write_profiles(tmp_path)
     runner = PowerFlowRunner(network, active, reactive)
     runner.run()
-    df = runner.aggregate_power_flow()
+    df = runner.voltage_table()
 
     # Should have one row per timestamp
     assert len(df) == 3
@@ -240,12 +240,12 @@ def test_aggregate_power_flow(tmp_path: Path):
     assert (df["Maximum voltage (pu)"] >= df["Minimum voltage (pu)"]).all()
 
 
-def test_node_table(tmp_path: Path):
+def test_line_table(tmp_path: Path):
     network = _write_network(tmp_path)
     active, reactive = _write_profiles(tmp_path)
     runner = PowerFlowRunner(network, active, reactive)
     runner.run()
-    df = runner.node_table()
+    df = runner.line_table()
 
     # Should have one row per line (only 1 line in tiny network)
     assert len(df) == 1
@@ -259,17 +259,17 @@ def test_node_table(tmp_path: Path):
     assert (df["Maximum loading (pu)"] >= df["Minimum loading (pu)"]).all()
 
 
-def test_aggregate_power_flow_before_run_raises(tmp_path: Path):
+def test_voltage_table_before_run_raises(tmp_path: Path):
     network = _write_network(tmp_path)
     active, reactive = _write_profiles(tmp_path)
     runner = PowerFlowRunner(network, active, reactive)
     with pytest.raises(RuntimeError):
-        runner.aggregate_power_flow()
+        runner.voltage_table()
 
 
-def test_node_table_before_run_raises(tmp_path: Path):
+def test_line_table_before_run_raises(tmp_path: Path):
     network = _write_network(tmp_path)
     active, reactive = _write_profiles(tmp_path)
     runner = PowerFlowRunner(network, active, reactive)
     with pytest.raises(RuntimeError):
-        runner.node_table()
+        runner.line_table()

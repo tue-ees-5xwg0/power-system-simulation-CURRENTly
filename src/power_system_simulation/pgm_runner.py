@@ -209,13 +209,13 @@ class PowerFlowRunner:
     # ------------------------------------------------------------------ #
     # Step 5 -  creating the 2 tables                    #
     # ------------------------------------------------------------------ #
-    def aggregate_power_flow(self) -> pd.DataFrame:
+    def voltage_table(self) -> pd.DataFrame:
         """ "Table with each row representing a timestamp
         Maxium pu voltage of all nodes, minimum pu voltage of all nodes, id of the node with maximum voltage, id of the
         node with minimum voltage
         """
         if self.output_data is None:
-            raise RuntimeError("Call run() before aggregate_power_flow().")
+            raise RuntimeError("Call run() before voltage_table().")
 
         # Extract the relevant arrays from the output data.
         node_ids = self.output_data[ComponentType.node]["id"][0]
@@ -240,12 +240,12 @@ class PowerFlowRunner:
         )
         return result_df
 
-    def node_table(self) -> pd.DataFrame:
+    def line_table(self) -> pd.DataFrame:
         """ " Line id, energy loss of the line in kWh, maximum loading in pu, timestamp of maximum loading, miniming
         loading and minimum loading moment
         """
         if self.output_data is None:
-            raise RuntimeError("Call run() before node_table().")
+            raise RuntimeError("Call run() before line_table().")
 
         # Extract the relevant arrays from the output data.
         line_ids = self.output_data[ComponentType.line]["id"][0]
