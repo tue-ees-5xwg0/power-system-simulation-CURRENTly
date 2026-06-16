@@ -1233,8 +1233,6 @@ name = "power-system-simulation"
 version = "0.1"
 source = { editable = "." }
 dependencies = [
-    { name = "jupyter" },
-    { name = "matplotlib" },
     { name = "networkx" },
     { name = "numpy" },
     { name = "pandas" },
@@ -1246,12 +1244,16 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "ipykernel" },
+    { name = "jupyter" },
+    { name = "matplotlib" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
 example = [
     { name = "ipykernel" },
+    { name = "jupyter" },
+    { name = "matplotlib" },
 ]
 lint = [
     { name = "ruff" },
@@ -1263,8 +1265,6 @@ test = [
 
 [package.metadata]
 requires-dist = [
-    { name = "jupyter", specifier = ">=1.1.1" },
-    { name = "matplotlib", specifier = ">=3.11.0" },
     { name = "networkx", specifier = ">=3.6.1" },
     { name = "numpy", specifier = ">=2.4.4" },
     { name = "pandas", specifier = ">=3.0.3" },
@@ -1276,11 +1276,17 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "ipykernel" },
+    { name = "jupyter", specifier = ">=1.1.1" },
+    { name = "matplotlib", specifier = ">=3.11.0" },
     { name = "pytest" },
     { name = "pytest-cov" },
     { name = "ruff" },
 ]
-example = [{ name = "ipykernel" }]
+example = [
+    { name = "ipykernel" },
+    { name = "jupyter", specifier = ">=1.1.1" },
+    { name = "matplotlib", specifier = ">=3.11.0" },
+]
 lint = [{ name = "ruff" }]
 test = [
     { name = "pytest" },
